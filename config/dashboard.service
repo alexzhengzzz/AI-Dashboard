@@ -8,6 +8,7 @@ User=alexzheng
 Group=alexzheng
 WorkingDirectory=/home/alexzheng/server_dashboard
 Environment=PATH=/home/alexzheng/server_dashboard/venv/bin
+EnvironmentFile=/home/alexzheng/server_dashboard/.env
 ExecStart=/home/alexzheng/server_dashboard/venv/bin/python app.py
 ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed

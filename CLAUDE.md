@@ -46,7 +46,7 @@ pip install -r requirements.txt
 # 运行开发服务器
 python app.py
 # 访问: http://localhost:5000 或 http://服务器IP:5000
-# 默认密码: admin123
+# 密码: 在 .env 文件中设置的 DASHBOARD_PASSWORD
 ```
 
 ### 生产部署
@@ -62,8 +62,19 @@ sudo systemctl daemon-reload && sudo systemctl enable dashboard && sudo systemct
 
 ## 配置说明
 
-- 修改 `config/config.py` 中的 `DEFAULT_PASSWORD` 和 `SECRET_KEY`
-- HTTPS 环境需设置 `SESSION_COOKIE_SECURE = True`
+### 密码配置（重要）
+首次部署前必须设置密码：
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑 .env 文件，设置你的密码
+nano .env
+# 修改：DASHBOARD_PASSWORD=your_secure_password_here
+```
+
+### 其他配置
+- HTTPS 环境需设置 `SESSION_COOKIE_SECURE = True` 
 - 监控功能：CPU/内存/磁盘/网络资源、系统服务状态、常用端口监控、进程内存排行、进程管理
 - 系统要求：Python 3.6+、psutil 权限、端口 5000
 
