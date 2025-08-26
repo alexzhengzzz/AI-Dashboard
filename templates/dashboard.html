@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服务器监控仪表板</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <h1>服务器监控仪表板</h1>
+        <div class="header-controls">
+            <span id="last-update">连接中...</span>
+            <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
+        </div>
+    </header>
+
+    <main class="dashboard">
+        <!-- 系统概览 -->
+        <section class="overview-section">
+            <div class="card system-info">
+                <h3>系统信息</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>主机名</label>
+                        <span id="hostname">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>IP地址</label>
+                        <span id="ip-address">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>操作系统</label>
+                        <span id="os-info">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>运行时间</label>
+                        <span id="uptime">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>负载平均</label>
+                        <span id="load-avg">-</span>
+                    </div>
+                    <div class="info-item">
+                        <label>系统架构</label>
+                        <span id="architecture">-</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 资源使用率 -->
+        <section class="metrics-section">
+            <div class="card metric-card">
+                <h3>CPU 使用率</h3>
+                <div class="metric-value">
+                    <span id="cpu-usage">0</span>%
+                </div>
+                <canvas id="cpu-chart" width="300" height="150"></canvas>
+            </div>
+
+            <div class="card metric-card">
+                <h3>内存使用</h3>
+                <div class="metric-value">
+                    <span id="memory-usage">0</span>%
+                </div>
+                <div class="memory-details">
+                    <div class="memory-bar">
+                        <div class="memory-used" id="memory-bar"></div>
+                    </div>
+                    <div class="memory-info">
+                        <span id="memory-used-gb">0</span>GB / <span id="memory-total-gb">0</span>GB
+                    </div>
+                </div>
+            </div>
+
+            <div class="card metric-card">
+                <h3>磁盘使用</h3>
+                <div id="disk-info">
+                    <!-- 动态生成磁盘信息 -->
+                </div>
+            </div>
+
+            <div class="card metric-card">
+                <h3>网络流量</h3>
+                <div class="network-stats">
+                    <div class="network-item">
+                        <label>接收:</label>
+                        <span id="network-rx">0 MB</span>
+                    </div>
+                    <div class="network-item">
+                        <label>发送:</label>
+                        <span id="network-tx">0 MB</span>
+                    </div>
+                </div>
+                <canvas id="network-chart" width="300" height="150"></canvas>
+            </div>
+        </section>
+
+        <!-- 进程和服务 -->
+        <section class="services-section">
+            <div class="card">
+                <h3>系统服务状态</h3>
+                <div id="services-list" class="services-grid">
+                    <!-- 动态生成服务状态 -->
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>端口监控</h3>
+                <div id="ports-list" class="ports-grid">
+                    <!-- 动态生成端口状态 -->
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>CPU使用率 TOP 10</h3>
+                <div id="processes-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>PID</th>
+                                <th>进程名</th>
+                                <th>CPU%</th>
+                                <th>内存%</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="processes-tbody">
+                            <!-- 动态生成进程列表 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>内存使用排行 TOP 15</h3>
+                <div id="memory-processes-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>PID</th>
+                                <th>进程名</th>
+                                <th>用户</th>
+                                <th>内存(MB)</th>
+                                <th>内存%</th>
+                                <th>命令</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="memory-processes-tbody">
+                            <!-- 动态生成内存进程列表 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 确认对话框 -->
+    <div id="confirm-dialog" class="dialog-overlay" style="display: none;">
+        <div class="dialog">
+            <h3>确认操作</h3>
+            <p id="confirm-message">您确定要关闭端口进程吗？</p>
+            <div class="dialog-buttons">
+                <button id="confirm-yes" class="btn btn-danger">确认</button>
+                <button id="confirm-no" class="btn btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结果提示框 -->
+    <div id="result-toast" class="toast" style="display: none;">
+        <span id="toast-message"></span>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
