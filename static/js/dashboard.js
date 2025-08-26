@@ -3,14 +3,25 @@ class Dashboard {
         this.socket = io();
         this.cpuChart = null;
         this.networkChart = null;
+        this.expandedChart = null;
         this.networkHistory = [];
         this.cpuHistory = [];
         this.maxHistoryLength = 20;
+        
+        // 新增状态管理
+        this.currentTab = 'overview';
+        this.collapsedCards = new Set();
+        this.sortStates = {};
+        this.toastId = 0;
         
         this.initSocketEvents();
         this.initCharts();
         this.startDataRefresh();
         this.initDialogs();
+        this.initTabs();
+        this.initCollapse();
+        this.initTableSorting();
+        this.initFilters();
     }
 
     initSocketEvents() {
@@ -124,6 +135,10 @@ class Dashboard {
         this.updatePortsStatus(data.ports);
         this.updateProcessList(data.processes);
         this.updateMemoryProcessList(data.memory_processes);
+        
+        // 更新快速状态卡片
+        this.updateQuickStats(data);
+        
         this.updateStatus(`最后更新: ${new Date().toLocaleTimeString()}`);
     }
 
@@ -141,6 +156,21 @@ class Dashboard {
         document.getElementById('load-avg').textContent = 
             `${cpu.load_avg['1min']} ${cpu.load_avg['5min']} ${cpu.load_avg['15min']}`;
 
+        // 更新CPU状态
+        const cpuStatus = document.getElementById('cpu-status');
+        if (cpuStatus) {
+            if (usage > 90) {
+                cpuStatus.textContent = '严重';
+                cpuStatus.className = 'metric-status critical';
+            } else if (usage > 70) {
+                cpuStatus.textContent = '警告';
+                cpuStatus.className = 'metric-status warning';
+            } else {
+                cpuStatus.textContent = '正常';
+                cpuStatus.className = 'metric-status';
+            }
+        }
+
         // 更新CPU图表
         this.cpuHistory.push(usage);
         if (this.cpuHistory.length > this.maxHistoryLength) {
@@ -151,9 +181,11 @@ class Dashboard {
             new Date(Date.now() - (this.cpuHistory.length - 1 - i) * 5000).toLocaleTimeString()
         );
 
-        this.cpuChart.data.labels = labels;
-        this.cpuChart.data.datasets[0].data = this.cpuHistory;
-        this.cpuChart.update('none');
+        if (this.cpuChart) {
+            this.cpuChart.data.labels = labels;
+            this.cpuChart.data.datasets[0].data = this.cpuHistory;
+            this.cpuChart.update('none');
+        }
     }
 
     updateMemoryMetrics(memory) {
@@ -165,6 +197,21 @@ class Dashboard {
         document.getElementById('memory-used-gb').textContent = usedGB;
         document.getElementById('memory-total-gb').textContent = totalGB;
         document.getElementById('memory-bar').style.width = `${usagePercent}%`;
+        
+        // 更新内存状态
+        const memoryStatus = document.getElementById('memory-status');
+        if (memoryStatus) {
+            if (usagePercent > 90) {
+                memoryStatus.textContent = '严重';
+                memoryStatus.className = 'metric-status critical';
+            } else if (usagePercent > 80) {
+                memoryStatus.textContent = '警告';
+                memoryStatus.className = 'metric-status warning';
+            } else {
+                memoryStatus.textContent = '正常';
+                memoryStatus.className = 'metric-status';
+            }
+        }
     }
 
     updateDiskMetrics(disks) {
@@ -321,36 +368,234 @@ class Dashboard {
         });
     }
 
+    initTabs() {
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetTab = btn.dataset.tab;
+                
+                // 更新按钮状态
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // 更新内容显示
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === `${targetTab}-tab`) {
+                        content.classList.add('active');
+                    }
+                });
+                
+                this.currentTab = targetTab;
+                
+                // 重新初始化图表（如果需要）
+                if (targetTab === 'resources') {
+                    setTimeout(() => {
+                        if (this.cpuChart) this.cpuChart.resize();
+                        if (this.networkChart) this.networkChart.resize();
+                    }, 100);
+                }
+            });
+        });
+    }
+    
+    initCollapse() {
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('collapse-btn') || e.target.parentElement.classList.contains('collapse-btn')) {
+                const btn = e.target.classList.contains('collapse-btn') ? e.target : e.target.parentElement;
+                const targetId = btn.dataset.target;
+                const targetElement = document.getElementById(targetId);
+                const icon = btn.querySelector('span');
+                
+                if (targetElement) {
+                    if (this.collapsedCards.has(targetId)) {
+                        targetElement.classList.remove('collapsed');
+                        icon.textContent = '−';
+                        this.collapsedCards.delete(targetId);
+                    } else {
+                        targetElement.classList.add('collapsed');
+                        icon.textContent = '+';
+                        this.collapsedCards.add(targetId);
+                    }
+                }
+            }
+        });
+    }
+    
+    initTableSorting() {
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('sortable')) {
+                const th = e.target;
+                const table = th.closest('table');
+                const sortKey = th.dataset.sort;
+                const tbody = table.querySelector('tbody');
+                
+                // 更新排序状态
+                const currentSort = this.sortStates[table.className] || { key: null, order: 'asc' };
+                
+                if (currentSort.key === sortKey) {
+                    currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.key = sortKey;
+                    currentSort.order = 'asc';
+                }
+                
+                this.sortStates[table.className] = currentSort;
+                
+                // 更新视觉指示器
+                table.querySelectorAll('.sortable').forEach(header => {
+                    header.classList.remove('sort-asc', 'sort-desc');
+                });
+                th.classList.add(`sort-${currentSort.order}`);
+                
+                // 排序表格行
+                this.sortTableRows(tbody, sortKey, currentSort.order);
+            }
+        });
+    }
+    
+    sortTableRows(tbody, sortKey, order) {
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        rows.sort((a, b) => {
+            let aValue, bValue;
+            
+            switch (sortKey) {
+                case 'pid':
+                    aValue = parseInt(a.cells[0].textContent) || 0;
+                    bValue = parseInt(b.cells[0].textContent) || 0;
+                    break;
+                case 'name':
+                case 'user':
+                    aValue = a.cells[1].textContent.toLowerCase();
+                    bValue = b.cells[1].textContent.toLowerCase();
+                    break;
+                case 'cpu':
+                case 'memory':
+                case 'memory-percent':
+                    const cellIndex = sortKey === 'cpu' ? 2 : sortKey === 'memory' ? 3 : sortKey === 'memory-percent' ? 4 : 3;
+                    aValue = parseFloat(a.cells[cellIndex].textContent) || 0;
+                    bValue = parseFloat(b.cells[cellIndex].textContent) || 0;
+                    break;
+                case 'memory-mb':
+                    aValue = parseInt(a.cells[3].textContent) || 0;
+                    bValue = parseInt(b.cells[3].textContent) || 0;
+                    break;
+                default:
+                    aValue = a.cells[0].textContent.toLowerCase();
+                    bValue = b.cells[0].textContent.toLowerCase();
+            }
+            
+            if (order === 'asc') {
+                return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+            } else {
+                return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+            }
+        });
+        
+        // 重新插入排序后的行
+        rows.forEach(row => tbody.appendChild(row));
+    }
+    
+    initFilters() {
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('filter-btn')) {
+                const btn = e.target;
+                const container = btn.closest('.card');
+                const filterType = btn.dataset.filter;
+                
+                // 更新按钮状态
+                container.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // 应用过滤器
+                this.applyFilter(container, filterType);
+            }
+        });
+    }
+    
+    applyFilter(container, filterType) {
+        const items = container.querySelectorAll('.service-item, .port-item');
+        
+        items.forEach(item => {
+            let show = true;
+            
+            if (filterType !== 'all') {
+                const statusElement = item.querySelector('.service-status, .port-status');
+                if (statusElement) {
+                    const hasStatus = statusElement.classList.contains(filterType) || 
+                                    (filterType === 'active' && statusElement.classList.contains('active')) ||
+                                    (filterType === 'inactive' && statusElement.classList.contains('inactive')) ||
+                                    (filterType === 'open' && statusElement.classList.contains('open')) ||
+                                    (filterType === 'closed' && statusElement.classList.contains('closed'));
+                    show = hasStatus;
+                }
+            }
+            
+            item.style.display = show ? 'block' : 'none';
+        });
+    }
+    
     initDialogs() {
         const confirmDialog = document.getElementById('confirm-dialog');
+        const chartModal = document.getElementById('chart-modal');
         const confirmYes = document.getElementById('confirm-yes');
         const confirmNo = document.getElementById('confirm-no');
         
+        // 确认对话框事件
         confirmNo.onclick = () => {
-            confirmDialog.style.display = 'none';
+            this.hideModal(confirmDialog);
         };
         
-        // 点击对话框外部关闭
-        confirmDialog.onclick = (e) => {
-            if (e.target === confirmDialog) {
-                confirmDialog.style.display = 'none';
+        // 关闭按钮事件
+        document.querySelectorAll('.modal-close').forEach(btn => {
+            btn.onclick = (e) => {
+                const modal = e.target.closest('.modal-overlay');
+                this.hideModal(modal);
+            };
+        });
+        
+        // 点击背景关闭
+        [confirmDialog, chartModal].forEach(modal => {
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    this.hideModal(modal);
+                }
+            };
+        });
+        
+        // 图表展开按钮
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('expand-chart-btn')) {
+                const chartType = e.target.dataset.chart;
+                this.showExpandedChart(chartType);
             }
-        };
+        });
     }
 
     showKillProcessDialog(port, processName, pid) {
         const confirmDialog = document.getElementById('confirm-dialog');
         const confirmMessage = document.getElementById('confirm-message');
+        const modalTitle = document.getElementById('modal-title');
         const confirmYes = document.getElementById('confirm-yes');
         
-        confirmMessage.textContent = `您确定要关闭端口 ${port} 上的进程 "${processName}" (PID: ${pid}) 吗？`;
+        modalTitle.textContent = '确认关闭进程';
+        confirmMessage.innerHTML = `
+            <strong>您确定要关闭以下进程吗？</strong><br><br>
+            端口: <code>${port}</code><br>
+            进程名: <code>${processName}</code><br>
+            PID: <code>${pid}</code><br><br>
+            <span style="color: #e53e3e; font-size: 14px;">此操作无法撤销！</span>
+        `;
         
         confirmYes.onclick = () => {
-            confirmDialog.style.display = 'none';
+            this.hideModal(confirmDialog);
             this.killProcess(port);
         };
         
-        confirmDialog.style.display = 'flex';
+        this.showModal(confirmDialog);
     }
 
     async killProcess(port) {
@@ -376,17 +621,113 @@ class Dashboard {
         }
     }
 
-    showToast(message, type = 'info') {
-        const toast = document.getElementById('result-toast');
-        const toastMessage = document.getElementById('toast-message');
+    updateQuickStats(data) {
+        // 更新快速状态卡片
+        const cpuOverview = document.getElementById('cpu-overview');
+        const memoryOverview = document.getElementById('memory-overview');
+        const diskOverview = document.getElementById('disk-overview');
+        const networkOverview = document.getElementById('network-overview');
         
-        toastMessage.textContent = message;
+        if (cpuOverview) cpuOverview.textContent = `${data.cpu.usage_percent.toFixed(1)}%`;
+        if (memoryOverview) memoryOverview.textContent = `${data.memory.percent.toFixed(1)}%`;
+        
+        if (diskOverview && data.disk.length > 0) {
+            const rootDisk = data.disk.find(d => d.mountpoint === '/') || data.disk[0];
+            diskOverview.textContent = `${rootDisk.percent.toFixed(1)}%`;
+        }
+        
+        if (networkOverview) {
+            let totalRx = 0;
+            data.network.forEach(iface => {
+                if (iface.interface !== 'lo') {
+                    totalRx += iface.bytes_recv;
+                }
+            });
+            const rxMB = (totalRx / (1024**2)).toFixed(1);
+            networkOverview.textContent = `${rxMB} MB`;
+        }
+    }
+    
+    showExpandedChart(chartType) {
+        const modal = document.getElementById('chart-modal');
+        const title = document.getElementById('chart-modal-title');
+        const canvas = document.getElementById('expanded-chart');
+        
+        title.textContent = `${chartType.toUpperCase()} 详细图表`;
+        
+        // 复制原始图表的配置
+        const sourceChart = chartType === 'cpu' ? this.cpuChart : this.networkChart;
+        if (sourceChart && canvas) {
+            const ctx = canvas.getContext('2d');
+            
+            // 销毁之前的扩展图表
+            if (this.expandedChart) {
+                this.expandedChart.destroy();
+            }
+            
+            // 创建新的扩展图表
+            this.expandedChart = new Chart(ctx, {
+                type: sourceChart.config.type,
+                data: JSON.parse(JSON.stringify(sourceChart.data)),
+                options: {
+                    ...sourceChart.config.options,
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+        
+        this.showModal(modal);
+    }
+    
+    showModal(modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+    
+    hideModal(modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+    
+    createToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        const toastId = ++this.toastId;
+        
         toast.className = `toast ${type}`;
-        toast.style.display = 'block';
+        toast.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span>${message}</span>
+                <button onclick="dashboard.removeToast(${toastId})" style="background: none; border: none; color: inherit; margin-left: 12px; cursor: pointer; font-size: 16px;">&times;</button>
+            </div>
+        `;
+        toast.dataset.id = toastId;
         
+        container.appendChild(toast);
+        
+        // 自动移除
         setTimeout(() => {
-            toast.style.display = 'none';
-        }, 3000);
+            this.removeToast(toastId);
+        }, 5000);
+        
+        return toastId;
+    }
+    
+    removeToast(toastId) {
+        const toast = document.querySelector(`[data-id="${toastId}"]`);
+        if (toast) {
+            toast.style.animation = 'toastSlideOut 0.3s ease forwards';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }
+    }
+    
+    showToast(message, type = 'info') {
+        return this.createToast(message, type);
     }
 
     updateProcessList(processes) {
@@ -408,6 +749,8 @@ class Dashboard {
 
     updateMemoryProcessList(memoryProcesses) {
         const tbody = document.getElementById('memory-processes-tbody');
+        if (!tbody) return;
+        
         tbody.innerHTML = '';
 
         memoryProcesses.forEach(proc => {
@@ -422,7 +765,9 @@ class Dashboard {
                 <td>${proc.username || '-'}</td>
                 <td>${proc.memory_rss_mb || 0}</td>
                 <td>${(proc.memory_percent || 0).toFixed(1)}%</td>
-                <td title="${proc.cmdline || '-'}">${cmdline || '-'}</td>
+                <td class="command-col" title="${proc.cmdline || '-'}">
+                    <span class="command-text">${cmdline || '-'}</span>
+                </td>
                 <td>
                     ${canKill ? 
                         `<button class="kill-process-btn" onclick="dashboard.confirmKillProcess(${proc.pid}, '${proc.name}', ${proc.memory_rss_mb})">终止</button>` :
@@ -432,35 +777,75 @@ class Dashboard {
             `;
             tbody.appendChild(row);
         });
+        
+        // 添加命令行工具提示
+        this.addCommandTooltips(tbody);
+    }
+    
+    addCommandTooltips(tbody) {
+        const commandCells = tbody.querySelectorAll('.command-col');
+        
+        commandCells.forEach(cell => {
+            const span = cell.querySelector('.command-text');
+            const fullCommand = cell.title;
+            
+            if (fullCommand && fullCommand !== '-' && span.textContent !== fullCommand) {
+                cell.addEventListener('mouseenter', (e) => {
+                    const tooltip = document.createElement('div');
+                    tooltip.className = 'command-tooltip';
+                    tooltip.textContent = fullCommand;
+                    
+                    document.body.appendChild(tooltip);
+                    
+                    const rect = cell.getBoundingClientRect();
+                    tooltip.style.left = `${rect.left}px`;
+                    tooltip.style.top = `${rect.bottom + 5}px`;
+                    tooltip.style.display = 'block';
+                    
+                    cell.dataset.tooltipId = Date.now();
+                    tooltip.dataset.tooltipId = cell.dataset.tooltipId;
+                });
+                
+                cell.addEventListener('mouseleave', (e) => {
+                    const tooltip = document.querySelector(`[data-tooltip-id="${cell.dataset.tooltipId}"]`);
+                    if (tooltip) {
+                        tooltip.remove();
+                    }
+                });
+            }
+        });
     }
 
     confirmKillProcess(pid, name, memoryMB) {
         const dialog = document.getElementById('confirm-dialog');
         const message = document.getElementById('confirm-message');
+        const modalTitle = document.getElementById('modal-title');
         
+        modalTitle.textContent = '确认终止进程';
         message.innerHTML = `
-            <strong>确认终止进程？</strong><br>
-            PID: ${pid}<br>
-            进程名: ${name}<br>
-            内存占用: ${memoryMB}MB<br><br>
-            <span style="color: #ff6b6b;">此操作无法撤销！</span>
+            <strong>您确定要终止以下进程吗？</strong><br><br>
+            PID: <code>${pid}</code><br>
+            进程名: <code>${name}</code><br>
+            内存占用: <code>${memoryMB}MB</code><br><br>
+            <span style="color: #e53e3e; font-size: 14px;">此操作无法撤销！</span>
         `;
-        
-        dialog.style.display = 'flex';
         
         document.getElementById('confirm-yes').onclick = () => {
             this.killProcess(pid);
-            dialog.style.display = 'none';
+            this.hideModal(dialog);
         };
         
-        document.getElementById('confirm-no').onclick = () => {
-            dialog.style.display = 'none';
-        };
+        this.showModal(dialog);
     }
 
-    async killProcess(pid) {
+    async killProcess(pidOrPort) {
+        this.showLoadingIndicator('正在终止进程...');
+        
         try {
-            const response = await fetch(`/api/kill_process/${pid}`, {
+            const isPort = typeof pidOrPort === 'string' && pidOrPort.length <= 5;
+            const endpoint = isPort ? `/api/kill_port_process/${pidOrPort}` : `/api/kill_process/${pidOrPort}`;
+            
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -470,14 +855,31 @@ class Dashboard {
             const result = await response.json();
             
             if (result.success) {
-                this.showToast(`成功终止进程 PID: ${pid}`, 'success');
+                this.showToast(result.message || '进程已成功终止', 'success');
+                // 立即刷新数据
+                this.socket.emit('request_stats');
             } else {
-                this.showToast(`终止进程失败: ${result.message}`, 'error');
+                this.showToast(`操作失败: ${result.message}`, 'error');
             }
         } catch (error) {
             console.error('Error killing process:', error);
-            this.showToast('网络错误，无法终止进程', 'error');
+            this.showToast('网络错误，操作失败', 'error');
+        } finally {
+            this.hideLoadingIndicator();
         }
+    }
+    
+    showLoadingIndicator(message = '加载中...') {
+        const indicator = document.getElementById('loading-indicator');
+        const messageEl = document.getElementById('loading-message');
+        
+        if (messageEl) messageEl.textContent = message;
+        indicator.style.display = 'flex';
+    }
+    
+    hideLoadingIndicator() {
+        const indicator = document.getElementById('loading-indicator');
+        indicator.style.display = 'none';
     }
 
     updateStatus(status) {
@@ -493,7 +895,47 @@ class Dashboard {
     }
 }
 
+// 全局变量
+let dashboard;
+
 // 初始化仪表板
 document.addEventListener('DOMContentLoaded', () => {
-    new Dashboard();
+    dashboard = new Dashboard();
 });
+
+// 添加CSS动画样式
+const style = document.createElement('style');
+style.textContent = `
+@keyframes toastSlideOut {
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+.command-text {
+    cursor: help;
+}
+
+.loading-overlay {
+    backdrop-filter: blur(3px);
+}
+
+.stat-item.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.tab-content {
+    min-height: 400px;
+}
+
+.metric-card .card-body {
+    min-height: 200px;
+}
+`;
+document.head.appendChild(style);

@@ -18,162 +18,330 @@
     </header>
 
     <main class="dashboard">
-        <!-- 系统概览 -->
-        <section class="overview-section">
-            <div class="card system-info">
-                <h3>系统信息</h3>
-                <div class="info-grid">
-                    <div class="info-item">
-                        <label>主机名</label>
-                        <span id="hostname">-</span>
-                    </div>
-                    <div class="info-item">
-                        <label>IP地址</label>
-                        <span id="ip-address">-</span>
-                    </div>
-                    <div class="info-item">
-                        <label>操作系统</label>
-                        <span id="os-info">-</span>
-                    </div>
-                    <div class="info-item">
-                        <label>运行时间</label>
-                        <span id="uptime">-</span>
-                    </div>
-                    <div class="info-item">
-                        <label>负载平均</label>
-                        <span id="load-avg">-</span>
-                    </div>
-                    <div class="info-item">
-                        <label>系统架构</label>
-                        <span id="architecture">-</span>
-                    </div>
-                </div>
-            </div>
-        </section>
+        <!-- 标签页导航 -->
+        <nav class="tab-navigation">
+            <button class="tab-btn active" data-tab="overview">系统概览</button>
+            <button class="tab-btn" data-tab="resources">资源监控</button>
+            <button class="tab-btn" data-tab="processes">进程管理</button>
+            <button class="tab-btn" data-tab="services">服务端口</button>
+        </nav>
 
-        <!-- 资源使用率 -->
-        <section class="metrics-section">
-            <div class="card metric-card">
-                <h3>CPU 使用率</h3>
-                <div class="metric-value">
-                    <span id="cpu-usage">0</span>%
-                </div>
-                <canvas id="cpu-chart" width="300" height="150"></canvas>
-            </div>
-
-            <div class="card metric-card">
-                <h3>内存使用</h3>
-                <div class="metric-value">
-                    <span id="memory-usage">0</span>%
-                </div>
-                <div class="memory-details">
-                    <div class="memory-bar">
-                        <div class="memory-used" id="memory-bar"></div>
+        <!-- 系统概览标签页 -->
+        <div id="overview-tab" class="tab-content active">
+            <div class="overview-grid">
+                <div class="card system-info-card">
+                    <div class="card-header">
+                        <h3>系统信息</h3>
+                        <button class="collapse-btn" data-target="system-info">
+                            <span>−</span>
+                        </button>
                     </div>
-                    <div class="memory-info">
-                        <span id="memory-used-gb">0</span>GB / <span id="memory-total-gb">0</span>GB
+                    <div id="system-info" class="card-body">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-icon">🖥️</div>
+                                <div class="info-content">
+                                    <label>主机名</label>
+                                    <span id="hostname">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-icon">🌐</div>
+                                <div class="info-content">
+                                    <label>IP地址</label>
+                                    <span id="ip-address">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-icon">💽</div>
+                                <div class="info-content">
+                                    <label>操作系统</label>
+                                    <span id="os-info">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-icon">⏰</div>
+                                <div class="info-content">
+                                    <label>运行时间</label>
+                                    <span id="uptime">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-icon">📊</div>
+                                <div class="info-content">
+                                    <label>负载平均</label>
+                                    <span id="load-avg">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-icon">🔧</div>
+                                <div class="info-content">
+                                    <label>系统架构</label>
+                                    <span id="architecture">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-stats">
+                    <div class="stat-item cpu-stat">
+                        <div class="stat-header">
+                            <span class="stat-icon">⚡</span>
+                            <span class="stat-title">CPU</span>
+                        </div>
+                        <div class="stat-value" id="cpu-overview">0%</div>
+                    </div>
+                    <div class="stat-item memory-stat">
+                        <div class="stat-header">
+                            <span class="stat-icon">💾</span>
+                            <span class="stat-title">内存</span>
+                        </div>
+                        <div class="stat-value" id="memory-overview">0%</div>
+                    </div>
+                    <div class="stat-item disk-stat">
+                        <div class="stat-header">
+                            <span class="stat-icon">💿</span>
+                            <span class="stat-title">磁盘</span>
+                        </div>
+                        <div class="stat-value" id="disk-overview">0%</div>
+                    </div>
+                    <div class="stat-item network-stat">
+                        <div class="stat-header">
+                            <span class="stat-icon">🌍</span>
+                            <span class="stat-title">网络</span>
+                        </div>
+                        <div class="stat-value" id="network-overview">0 MB</div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div class="card metric-card">
-                <h3>磁盘使用</h3>
-                <div id="disk-info">
-                    <!-- 动态生成磁盘信息 -->
-                </div>
-            </div>
-
-            <div class="card metric-card">
-                <h3>网络流量</h3>
-                <div class="network-stats">
-                    <div class="network-item">
-                        <label>接收:</label>
-                        <span id="network-rx">0 MB</span>
+        <!-- 资源监控标签页 -->
+        <div id="resources-tab" class="tab-content">
+            <div class="resources-grid">
+                <div class="card metric-card">
+                    <div class="card-header">
+                        <h3>CPU 使用率</h3>
+                        <button class="expand-chart-btn" data-chart="cpu">📈</button>
                     </div>
-                    <div class="network-item">
-                        <label>发送:</label>
-                        <span id="network-tx">0 MB</span>
+                    <div class="card-body">
+                        <div class="metric-display">
+                            <div class="metric-value">
+                                <span id="cpu-usage">0</span>%
+                            </div>
+                            <div class="metric-status" id="cpu-status">正常</div>
+                        </div>
+                        <canvas id="cpu-chart" width="300" height="150"></canvas>
                     </div>
                 </div>
-                <canvas id="network-chart" width="300" height="150"></canvas>
-            </div>
-        </section>
 
-        <!-- 进程和服务 -->
-        <section class="services-section">
-            <div class="card">
-                <h3>系统服务状态</h3>
-                <div id="services-list" class="services-grid">
-                    <!-- 动态生成服务状态 -->
+                <div class="card metric-card">
+                    <div class="card-header">
+                        <h3>内存使用</h3>
+                        <button class="expand-chart-btn" data-chart="memory">📈</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="metric-display">
+                            <div class="metric-value">
+                                <span id="memory-usage">0</span>%
+                            </div>
+                            <div class="metric-status" id="memory-status">正常</div>
+                        </div>
+                        <div class="memory-details">
+                            <div class="memory-bar">
+                                <div class="memory-used" id="memory-bar"></div>
+                            </div>
+                            <div class="memory-info">
+                                <span id="memory-used-gb">0</span>GB / <span id="memory-total-gb">0</span>GB
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card metric-card">
+                    <div class="card-header">
+                        <h3>磁盘使用</h3>
+                        <button class="collapse-btn" data-target="disk-details">
+                            <span>−</span>
+                        </button>
+                    </div>
+                    <div id="disk-details" class="card-body">
+                        <div id="disk-info">
+                            <!-- 动态生成磁盘信息 -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card metric-card">
+                    <div class="card-header">
+                        <h3>网络流量</h3>
+                        <button class="expand-chart-btn" data-chart="network">📈</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="network-stats">
+                            <div class="network-item">
+                                <label>接收:</label>
+                                <span id="network-rx">0 MB</span>
+                            </div>
+                            <div class="network-item">
+                                <label>发送:</label>
+                                <span id="network-tx">0 MB</span>
+                            </div>
+                        </div>
+                        <canvas id="network-chart" width="300" height="150"></canvas>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <div class="card">
-                <h3>端口监控</h3>
-                <div id="ports-list" class="ports-grid">
-                    <!-- 动态生成端口状态 -->
+        <!-- 进程管理标签页 -->
+        <div id="processes-tab" class="tab-content">
+            <div class="processes-grid">
+                <div class="card process-card">
+                    <div class="card-header">
+                        <h3>CPU使用率 TOP 10</h3>
+                        <div class="table-controls">
+                            <button class="refresh-btn" data-target="cpu-processes">🔄</button>
+                            <button class="collapse-btn" data-target="cpu-processes-table">
+                                <span>−</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="cpu-processes-table" class="card-body">
+                        <div class="table-wrapper">
+                            <table class="process-table sortable">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" data-sort="pid">PID <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="name">进程名 <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="cpu">CPU% <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="memory">内存% <span class="sort-arrow">↕</span></th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="processes-tbody">
+                                    <!-- 动态生成进程列表 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card process-card">
+                    <div class="card-header">
+                        <h3>内存使用排行 TOP 15</h3>
+                        <div class="table-controls">
+                            <button class="refresh-btn" data-target="memory-processes">🔄</button>
+                            <button class="collapse-btn" data-target="memory-processes-table">
+                                <span>−</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="memory-processes-table" class="card-body">
+                        <div class="table-wrapper">
+                            <table class="process-table sortable">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" data-sort="pid">PID <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="name">进程名 <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="user">用户 <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="memory-mb">内存(MB) <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="memory-percent">内存% <span class="sort-arrow">↕</span></th>
+                                        <th class="command-col">命令</th>
+                                        <th class="action-col">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="memory-processes-tbody">
+                                    <!-- 动态生成内存进程列表 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <div class="card">
-                <h3>CPU使用率 TOP 10</h3>
-                <div id="processes-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>PID</th>
-                                <th>进程名</th>
-                                <th>CPU%</th>
-                                <th>内存%</th>
-                                <th>状态</th>
-                            </tr>
-                        </thead>
-                        <tbody id="processes-tbody">
-                            <!-- 动态生成进程列表 -->
-                        </tbody>
-                    </table>
+        <!-- 服务端口标签页 -->
+        <div id="services-tab" class="tab-content">
+            <div class="services-grid">
+                <div class="card service-card">
+                    <div class="card-header">
+                        <h3>系统服务状态</h3>
+                        <div class="service-filter">
+                            <button class="filter-btn active" data-filter="all">全部</button>
+                            <button class="filter-btn" data-filter="active">运行中</button>
+                            <button class="filter-btn" data-filter="inactive">已停止</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="services-list" class="services-list">
+                            <!-- 动态生成服务状态 -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card port-card">
+                    <div class="card-header">
+                        <h3>端口监控</h3>
+                        <div class="port-filter">
+                            <button class="filter-btn active" data-filter="all">全部</button>
+                            <button class="filter-btn" data-filter="open">开放</button>
+                            <button class="filter-btn" data-filter="closed">关闭</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="ports-list" class="ports-list">
+                            <!-- 动态生成端口状态 -->
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <div class="card">
-                <h3>内存使用排行 TOP 15</h3>
-                <div id="memory-processes-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>PID</th>
-                                <th>进程名</th>
-                                <th>用户</th>
-                                <th>内存(MB)</th>
-                                <th>内存%</th>
-                                <th>命令</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="memory-processes-tbody">
-                            <!-- 动态生成内存进程列表 -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
+        </div>
     </main>
 
-    <!-- 确认对话框 -->
-    <div id="confirm-dialog" class="dialog-overlay" style="display: none;">
-        <div class="dialog">
-            <h3>确认操作</h3>
-            <p id="confirm-message">您确定要关闭端口进程吗？</p>
-            <div class="dialog-buttons">
-                <button id="confirm-yes" class="btn btn-danger">确认</button>
+    <!-- 改进的确认对话框 -->
+    <div id="confirm-dialog" class="modal-overlay" style="display: none;">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-icon warning">⚠️</div>
+                <h3 id="modal-title">确认操作</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">您确定要执行此操作吗？</p>
+            </div>
+            <div class="modal-footer">
                 <button id="confirm-no" class="btn btn-secondary">取消</button>
+                <button id="confirm-yes" class="btn btn-danger">确认</button>
             </div>
         </div>
     </div>
 
-    <!-- 结果提示框 -->
-    <div id="result-toast" class="toast" style="display: none;">
-        <span id="toast-message"></span>
+    <!-- 图表全屏模态框 -->
+    <div id="chart-modal" class="modal-overlay chart-modal" style="display: none;">
+        <div class="chart-modal-container">
+            <div class="chart-modal-header">
+                <h3 id="chart-modal-title">图表详情</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="chart-modal-body">
+                <canvas id="expanded-chart" width="800" height="400"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 改进的Toast通知容器 -->
+    <div id="toast-container" class="toast-container">
+        <!-- 动态生成toast通知 -->
+    </div>
+
+    <!-- 加载指示器 -->
+    <div id="loading-indicator" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p id="loading-message">加载中...</p>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
