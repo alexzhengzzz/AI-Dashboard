@@ -138,7 +138,7 @@ class Dashboard {
         this.updateProcessList(data.processes);
         this.updateMemoryProcessList(data.memory_processes);
         
-        // 更新概览页面的指标
+        // 更新概览页面的指标（在网络数据更新后）
         this.updateOverviewMetrics(data);
         
         this.updateStatus(`最后更新: ${new Date().toLocaleTimeString()}`);
@@ -426,38 +426,42 @@ class Dashboard {
             }
         }
         
-        // 更新网络流量显示
-        if (data.network) {
-            let totalRx = 0, totalTx = 0;
-            
-            data.network.forEach(iface => {
-                if (iface.interface !== 'lo') {
-                    totalRx += iface.bytes_recv;
-                    totalTx += iface.bytes_sent;
-                }
-            });
-            
+        // 更新网络流量显示 - 使用已计算的速率数据
+        if (data.network && this.networkHistory.length > 0) {
             const networkOverview = document.getElementById('network-overview');
             const networkRxSpeed = document.getElementById('network-rx-speed');
             const networkTxSpeed = document.getElementById('network-tx-speed');
             
-            if (this.networkHistory.length > 0) {
-                const lastEntry = this.networkHistory[this.networkHistory.length - 1];
-                const rxRate = Math.max(0, (totalRx - lastEntry.rx) / (1024 * 1024 * 5)); // MB/s
-                const txRate = Math.max(0, (totalTx - lastEntry.tx) / (1024 * 1024 * 5)); // MB/s
-                
-                if (networkOverview) {
-                    const totalRate = (rxRate + txRate).toFixed(2);
-                    networkOverview.textContent = `${totalRate} MB/s`;
-                }
-                
-                if (networkRxSpeed) {
-                    networkRxSpeed.textContent = `${rxRate.toFixed(2)} MB/s`;
-                }
-                
-                if (networkTxSpeed) {
-                    networkTxSpeed.textContent = `${txRate.toFixed(2)} MB/s`;
-                }
+            const latestEntry = this.networkHistory[this.networkHistory.length - 1];
+            const rxRate = latestEntry.rxRate || 0;
+            const txRate = latestEntry.txRate || 0;
+            const totalRate = rxRate + txRate;
+            
+            if (networkOverview) {
+                networkOverview.textContent = `${totalRate.toFixed(3)} MB/s`;
+            }
+            
+            if (networkRxSpeed) {
+                networkRxSpeed.textContent = `${rxRate.toFixed(3)}`;
+            }
+            
+            if (networkTxSpeed) {
+                networkTxSpeed.textContent = `${txRate.toFixed(3)}`;
+            }
+        } else if (data.network) {
+            // 首次初始化时显示0
+            const networkOverview = document.getElementById('network-overview');
+            const networkRxSpeed = document.getElementById('network-rx-speed');
+            const networkTxSpeed = document.getElementById('network-tx-speed');
+            
+            if (networkOverview) {
+                networkOverview.textContent = `0.000 MB/s`;
+            }
+            if (networkRxSpeed) {
+                networkRxSpeed.textContent = `0.000`;
+            }
+            if (networkTxSpeed) {
+                networkTxSpeed.textContent = `0.000`;
             }
         }
     }
@@ -478,11 +482,12 @@ class Dashboard {
         document.getElementById('network-rx').textContent = `${rxMB} MB`;
         document.getElementById('network-tx').textContent = `${txMB} MB`;
 
-        // 更新网络图表（显示速率变化）
+        // 更新网络图表（显示速率变化，单位：MB/s）
         if (this.networkHistory.length > 0) {
             const lastEntry = this.networkHistory[this.networkHistory.length - 1];
-            const rxRate = Math.max(0, (totalRx - lastEntry.rx) / (1024 * 5)); // KB/s
-            const txRate = Math.max(0, (totalTx - lastEntry.tx) / (1024 * 5)); // KB/s
+            const timeDiff = 5; // 5秒间隔
+            const rxRate = Math.max(0, (totalRx - lastEntry.rx) / (1024 * 1024 * timeDiff)); // MB/s
+            const txRate = Math.max(0, (totalTx - lastEntry.tx) / (1024 * 1024 * timeDiff)); // MB/s
             
             this.networkHistory.push({ rx: totalRx, tx: totalTx, rxRate, txRate });
         } else {
