@@ -1130,38 +1130,476 @@ class Dashboard {
 
     // 终端相关方法
     initTerminal() {
-        // 延迟绑定事件，确保DOM已加载
-        setTimeout(() => {
-            const newTerminalBtn = document.getElementById('new-terminal-btn');
-            const clearTerminalBtn = document.getElementById('clear-terminal-btn');
+        // 使用try-catch确保终端功能错误不会影响其他功能
+        try {
+            // 延迟绑定事件，确保DOM已加载
+            setTimeout(() => {
+                try {
+                    const newTerminalBtn = document.getElementById('new-terminal-btn');
+                    const clearTerminalBtn = document.getElementById('clear-terminal-btn');
+                    
+                    if (newTerminalBtn) {
+                        newTerminalBtn.addEventListener('click', () => {
+                            try {
+                                console.log('New terminal button clicked');
+                                this.createNewTerminal();
+                            } catch (error) {
+                                console.error('Error creating terminal:', error);
+                                this.showToast('创建终端失败', 'error');
+                            }
+                        });
+                    } else {
+                        console.log('New terminal button not found');
+                    }
+
+                    if (clearTerminalBtn) {
+                        clearTerminalBtn.addEventListener('click', () => {
+                            try {
+                                this.clearCurrentTerminal();
+                            } catch (error) {
+                                console.error('Error clearing terminal:', error);
+                            }
+                        });
+                    }
+
+                    // 初始化虚拟键盘
+                    this.initMobileKeyboard();
+
+                    // 初始化终端设置控件
+                    this.initTerminalSettings();
+
+                    // 检测移动设备
+                    this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    
+                    // 移动端优化
+                    if (this.isMobile) {
+                        this.initMobileOptimizations();
+                        const mobileKeyboard = document.getElementById('mobile-keyboard');
+                        if (mobileKeyboard) {
+                            mobileKeyboard.style.display = 'block';
+                        }
+                    }
+                    
+                    // 监听窗口大小变化
+                    window.addEventListener('resize', () => {
+                        try {
+                            this.handleResize();
+                        } catch (error) {
+                            console.error('Error handling resize:', error);
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error initializing terminal:', error);
+                }
+            }, 1000);
+        } catch (error) {
+            console.error('Critical error in terminal initialization:', error);
+        }
+    }
+
+    initTerminalSettings() {
+        try {
+            // 终端设置默认值
+            this.terminalSettings = {
+                fontSize: this.isMobile ? 14 : 16,
+                theme: 'dark'
+            };
+
+            // 从localStorage加载设置
+            this.loadTerminalSettings();
+
+            // 更新显示
+            this.updateFontSizeDisplay();
+            this.updateThemeSelector();
+
+            // 绑定字体大小控件
+            const fontDecrease = document.getElementById('font-decrease');
+            const fontIncrease = document.getElementById('font-increase');
             
-            if (newTerminalBtn) {
-                newTerminalBtn.addEventListener('click', () => {
-                    console.log('New terminal button clicked');
-                    this.createNewTerminal();
-                });
-            } else {
-                console.log('New terminal button not found');
-            }
-
-            if (clearTerminalBtn) {
-                clearTerminalBtn.addEventListener('click', () => {
-                    this.clearCurrentTerminal();
+            if (fontDecrease) {
+                fontDecrease.addEventListener('click', () => {
+                    try {
+                        this.adjustFontSize(-2);
+                    } catch (error) {
+                        console.error('Error adjusting font size:', error);
+                    }
                 });
             }
 
-            // 初始化虚拟键盘
-            this.initMobileKeyboard();
+            if (fontIncrease) {
+                fontIncrease.addEventListener('click', () => {
+                    try {
+                        this.adjustFontSize(2);
+                    } catch (error) {
+                        console.error('Error adjusting font size:', error);
+                    }
+                });
+            }
 
-            // 检测移动设备
-            this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            if (this.isMobile) {
-                const mobileKeyboard = document.getElementById('mobile-keyboard');
-                if (mobileKeyboard) {
-                    mobileKeyboard.style.display = 'block';
+            // 绑定主题选择器
+            const themeSelector = document.getElementById('theme-selector');
+            if (themeSelector) {
+                themeSelector.addEventListener('change', (e) => {
+                    try {
+                        this.changeTheme(e.target.value);
+                    } catch (error) {
+                        console.error('Error changing theme:', error);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error initializing terminal settings:', error);
+        }
+    }
+
+    loadTerminalSettings() {
+        try {
+            const saved = localStorage.getItem('terminal-settings');
+            if (saved) {
+                const settings = JSON.parse(saved);
+                this.terminalSettings = { ...this.terminalSettings, ...settings };
+            }
+        } catch (error) {
+            console.warn('Failed to load terminal settings:', error);
+        }
+    }
+
+    saveTerminalSettings() {
+        try {
+            localStorage.setItem('terminal-settings', JSON.stringify(this.terminalSettings));
+        } catch (error) {
+            console.warn('Failed to save terminal settings:', error);
+        }
+    }
+
+    updateFontSizeDisplay() {
+        const display = document.getElementById('font-size-display');
+        if (display) {
+            display.textContent = this.terminalSettings.fontSize;
+        }
+    }
+
+    updateThemeSelector() {
+        const selector = document.getElementById('theme-selector');
+        if (selector) {
+            selector.value = this.terminalSettings.theme;
+        }
+    }
+
+    adjustFontSize(delta) {
+        const newSize = Math.max(10, Math.min(24, this.terminalSettings.fontSize + delta));
+        if (newSize !== this.terminalSettings.fontSize) {
+            this.terminalSettings.fontSize = newSize;
+            this.updateFontSizeDisplay();
+            this.saveTerminalSettings();
+            this.applySettingsToAllTerminals();
+        }
+    }
+
+    changeTheme(theme) {
+        if (theme !== this.terminalSettings.theme) {
+            this.terminalSettings.theme = theme;
+            this.saveTerminalSettings();
+            this.applySettingsToAllTerminals();
+        }
+    }
+
+    getTerminalTheme(themeName) {
+        const themes = {
+            dark: {
+                background: '#1e1e1e',
+                foreground: '#ffffff',
+                cursor: '#ffffff',
+                selection: '#ffffff20',
+                black: '#1e1e1e',
+                red: '#f87171',
+                green: '#10b981',
+                yellow: '#fbbf24',
+                blue: '#3b82f6',
+                magenta: '#a855f7',
+                cyan: '#06b6d4',
+                white: '#f3f4f6',
+                brightBlack: '#6b7280',
+                brightRed: '#fca5a5',
+                brightGreen: '#34d399',
+                brightYellow: '#fcd34d',
+                brightBlue: '#60a5fa',
+                brightMagenta: '#c084fc',
+                brightCyan: '#22d3ee',
+                brightWhite: '#ffffff'
+            },
+            light: {
+                background: '#ffffff',
+                foreground: '#1f2937',
+                cursor: '#1f2937',
+                selection: '#e5e7eb',
+                black: '#374151',
+                red: '#dc2626',
+                green: '#059669',
+                yellow: '#d97706',
+                blue: '#2563eb',
+                magenta: '#7c3aed',
+                cyan: '#0891b2',
+                white: '#f9fafb',
+                brightBlack: '#6b7280',
+                brightRed: '#ef4444',
+                brightGreen: '#10b981',
+                brightYellow: '#f59e0b',
+                brightBlue: '#3b82f6',
+                brightMagenta: '#8b5cf6',
+                brightCyan: '#06b6d4',
+                brightWhite: '#ffffff'
+            },
+            green: {
+                background: '#0d1117',
+                foreground: '#00ff41',
+                cursor: '#00ff41',
+                selection: '#00ff4120',
+                black: '#0d1117',
+                red: '#ff5555',
+                green: '#00ff41',
+                yellow: '#ffff55',
+                blue: '#55aaff',
+                magenta: '#ff55ff',
+                cyan: '#55ffff',
+                white: '#bbbbbb',
+                brightBlack: '#555555',
+                brightRed: '#ff8888',
+                brightGreen: '#88ff88',
+                brightYellow: '#ffff88',
+                brightBlue: '#8888ff',
+                brightMagenta: '#ff88ff',
+                brightCyan: '#88ffff',
+                brightWhite: '#ffffff'
+            },
+            blue: {
+                background: '#1e3a8a',
+                foreground: '#e0e7ff',
+                cursor: '#e0e7ff',
+                selection: '#e0e7ff20',
+                black: '#1e40af',
+                red: '#fca5a5',
+                green: '#86efac',
+                yellow: '#fcd34d',
+                blue: '#93c5fd',
+                magenta: '#c4b5fd',
+                cyan: '#67e8f9',
+                white: '#e0e7ff',
+                brightBlack: '#3730a3',
+                brightRed: '#fecaca',
+                brightGreen: '#bbf7d0',
+                brightYellow: '#fde68a',
+                brightBlue: '#bfdbfe',
+                brightMagenta: '#ddd6fe',
+                brightCyan: '#a5f3fc',
+                brightWhite: '#ffffff'
+            }
+        };
+        return themes[themeName] || themes.dark;
+    }
+
+    applySettingsToAllTerminals() {
+        this.terminals.forEach(terminalInfo => {
+            const terminal = terminalInfo.terminal;
+            
+            // 应用字体大小
+            terminal.options.fontSize = this.terminalSettings.fontSize;
+            
+            // 应用主题
+            const theme = this.getTerminalTheme(this.terminalSettings.theme);
+            Object.keys(theme).forEach(key => {
+                terminal.options.theme[key] = theme[key];
+            });
+
+            // 重新渲染终端
+            terminal.refresh(0, terminal.rows - 1);
+            
+            // 重新适应大小
+            if (terminalInfo.fitAddon) {
+                setTimeout(() => terminalInfo.fitAddon.fit(), 100);
+            }
+        });
+    }
+
+    // 移动端优化
+    initMobileOptimizations() {
+        console.log('Initializing mobile optimizations...');
+        
+        // 设置移动端默认字体大小
+        if (!this.terminalSettings) {
+            this.terminalSettings = {
+                fontSize: 14,
+                theme: 'dark'
+            };
+        }
+        
+        // 添加触摸优化
+        this.addTouchOptimizations();
+        
+        // 阻止页面缩放
+        this.preventZoom();
+        
+        // 优化键盘行为
+        this.optimizeVirtualKeyboard();
+    }
+
+    addTouchOptimizations() {
+        // 为小按钮添加更大的触摸区域
+        const style = document.createElement('style');
+        style.textContent = `
+            @media (max-width: 768px) {
+                .btn.btn-small {
+                    position: relative;
+                }
+                
+                .btn.btn-small::before {
+                    content: '';
+                    position: absolute;
+                    top: -10px;
+                    left: -10px;
+                    right: -10px;
+                    bottom: -10px;
+                    border-radius: 8px;
+                }
+                
+                .terminal-tab .close-terminal::before {
+                    top: -8px;
+                    left: -8px;
+                    right: -8px;
+                    bottom: -8px;
                 }
             }
-        }, 1000);
+        `;
+        document.head.appendChild(style);
+    }
+
+    preventZoom() {
+        // 阻止双击缩放
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function (event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+        
+        // 阻止手势缩放
+        document.addEventListener('gesturestart', function (e) {
+            e.preventDefault();
+        });
+        
+        document.addEventListener('gesturechange', function (e) {
+            e.preventDefault();
+        });
+        
+        document.addEventListener('gestureend', function (e) {
+            e.preventDefault();
+        });
+    }
+
+    optimizeVirtualKeyboard() {
+        // 优化虚拟键盘的显示和隐藏
+        const mobileKeyboard = document.getElementById('mobile-keyboard');
+        if (!mobileKeyboard) return;
+        
+        // 添加滑动手势隐藏/显示键盘
+        let startY = 0;
+        let isKeyboardVisible = true;
+        
+        mobileKeyboard.addEventListener('touchstart', (e) => {
+            startY = e.touches[0].clientY;
+        });
+        
+        mobileKeyboard.addEventListener('touchmove', (e) => {
+            const currentY = e.touches[0].clientY;
+            const diff = currentY - startY;
+            
+            if (Math.abs(diff) > 50) {
+                if (diff > 0 && isKeyboardVisible) {
+                    // 下滑隐藏键盘
+                    mobileKeyboard.style.transform = 'translateY(100%)';
+                    isKeyboardVisible = false;
+                } else if (diff < 0 && !isKeyboardVisible) {
+                    // 上滑显示键盘
+                    mobileKeyboard.style.transform = 'translateY(0)';
+                    isKeyboardVisible = true;
+                }
+                startY = currentY;
+            }
+        });
+        
+        // 添加键盘切换按钮
+        this.addKeyboardToggle();
+    }
+
+    addKeyboardToggle() {
+        const terminalControls = document.querySelector('.terminal-controls');
+        if (!terminalControls || !this.isMobile) return;
+        
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn btn-small keyboard-toggle';
+        toggleBtn.innerHTML = '⌨️';
+        toggleBtn.title = '显示/隐藏虚拟键盘';
+        
+        toggleBtn.addEventListener('click', () => {
+            const mobileKeyboard = document.getElementById('mobile-keyboard');
+            if (!mobileKeyboard) return;
+            
+            const isHidden = mobileKeyboard.style.transform === 'translateY(100%)';
+            if (isHidden) {
+                mobileKeyboard.style.transform = 'translateY(0)';
+                toggleBtn.innerHTML = '⌨️';
+            } else {
+                mobileKeyboard.style.transform = 'translateY(100%)';
+                toggleBtn.innerHTML = '⌨️';
+            }
+        });
+        
+        // 添加到主控制区域
+        const mainControls = terminalControls.querySelector('.terminal-main-controls');
+        if (mainControls) {
+            mainControls.appendChild(toggleBtn);
+        }
+    }
+
+    handleResize() {
+        // 处理窗口大小变化
+        if (this.resizeTimer) {
+            clearTimeout(this.resizeTimer);
+        }
+        
+        this.resizeTimer = setTimeout(() => {
+            // 重新适应所有终端大小
+            this.terminals.forEach(terminalInfo => {
+                if (terminalInfo.fitAddon) {
+                    terminalInfo.fitAddon.fit();
+                }
+            });
+            
+            // 更新移动设备检测
+            const newIsMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+            
+            if (newIsMobile !== this.isMobile) {
+                this.isMobile = newIsMobile;
+                
+                // 调整字体大小
+                if (this.terminalSettings) {
+                    const newFontSize = this.isMobile ? Math.max(12, this.terminalSettings.fontSize - 2) : Math.min(18, this.terminalSettings.fontSize + 2);
+                    if (newFontSize !== this.terminalSettings.fontSize) {
+                        this.terminalSettings.fontSize = newFontSize;
+                        this.updateFontSizeDisplay();
+                        this.applySettingsToAllTerminals();
+                    }
+                }
+                
+                // 显示或隐藏虚拟键盘
+                const mobileKeyboard = document.getElementById('mobile-keyboard');
+                if (mobileKeyboard) {
+                    mobileKeyboard.style.display = this.isMobile ? 'block' : 'none';
+                }
+            }
+        }, 250);
     }
 
     initMobileKeyboard() {
@@ -1242,25 +1680,44 @@ class Dashboard {
     }
 
     onTerminalCreated(sessionId) {
-        console.log('Terminal created with session ID:', sessionId);
-        const terminalId = ++this.terminalCounter;
-        const terminalName = `终端 ${terminalId}`;
+        try {
+            console.log('Terminal created with session ID:', sessionId);
+            const terminalId = ++this.terminalCounter;
+            const terminalName = `终端 ${terminalId}`;
 
-        // 创建xterm终端实例
-        const terminal = new Terminal({
-            theme: {
-                background: '#1e1e1e',
-                foreground: '#ffffff',
-                cursor: '#ffffff',
-                selection: '#ffffff20',
-            },
-            fontSize: this.isMobile ? 12 : 14,
-            fontFamily: 'Monaco, "Lucida Console", monospace',
-            cursorBlink: true,
-            cursorStyle: 'block',
-            scrollback: 1000,
-            convertEol: true
-        });
+            // 使用当前设置的字体大小和主题
+            const theme = this.getTerminalTheme(this.terminalSettings?.theme || 'dark');
+            const fontSize = this.terminalSettings?.fontSize || (this.isMobile ? 14 : 16);
+
+            // 检查xterm.js依赖是否加载
+            if (typeof Terminal === 'undefined') {
+                console.error('Terminal library not loaded');
+                this.showToast('终端组件加载失败，请刷新页面', 'error');
+                return;
+            }
+
+            if (typeof FitAddon === 'undefined' || typeof WebLinksAddon === 'undefined') {
+                console.error('Terminal addons not loaded');
+                this.showToast('终端插件加载失败，请刷新页面', 'error');
+                return;
+            }
+
+            // 创建xterm终端实例
+            const terminal = new Terminal({
+                theme: theme,
+                fontSize: fontSize,
+                lineHeight: 1.3,
+                fontFamily: 'Consolas, "SF Mono", Monaco, Menlo, "Ubuntu Mono", "Microsoft YaHei UI", monospace',
+                fontWeight: 'normal',
+                fontWeightBold: 'bold',
+                letterSpacing: 0.5,
+                cursorBlink: true,
+                cursorStyle: 'block',
+                scrollback: 1000,
+                convertEol: true,
+                allowTransparency: false,
+                minimumContrastRatio: 4.5
+            });
 
         // 创建插件
         const fitAddon = new FitAddon.FitAddon();
@@ -1348,6 +1805,10 @@ class Dashboard {
         resizeObserver.observe(terminalDiv);
 
         this.showToast(`${terminalName} 已创建`, 'success');
+        } catch (error) {
+            console.error('Error in onTerminalCreated:', error);
+            this.showToast('创建终端时发生错误', 'error');
+        }
     }
 
     onTerminalOutput(data) {
