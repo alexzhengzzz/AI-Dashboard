@@ -1685,6 +1685,129 @@ canvas {
     }
 }
 
+/* 系统概览页面专用紧凑布局优化 */
+#overview-tab .overview-row {
+    grid-template-columns: 3fr 2fr;  /* 调整第一行比例为3:2 */
+    gap: 15px;  /* 减少行间距 */
+    margin-bottom: 15px;  /* 减少底边距 */
+}
+
+#overview-tab .card {
+    padding: 15px;  /* 减少卡片内边距 */
+}
+
+/* 系统信息区域紧凑化 */
+#overview-tab .info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);  /* 3x2网格布局 */
+    gap: 12px;  /* 减少网格间距 */
+}
+
+#overview-tab .info-item {
+    padding: 12px;  /* 减少信息项内边距 */
+}
+
+/* 关键指标区域2x2布局 */
+#overview-tab .metrics-overview-card {
+    grid-column: span 2;  /* 跨越两列 */
+}
+
+#overview-tab .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);  /* 改为2x2布局 */
+    gap: 15px;  /* 减少间距 */
+}
+
+#overview-tab .metric-item {
+    padding: 15px;  /* 减少指标项内边距 */
+}
+
+/* 状态摘要横向紧凑排列 */
+#overview-tab .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);  /* 4个项目横向排列 */
+    gap: 10px;  /* 减少间距 */
+}
+
+#overview-tab .summary-item {
+    padding: 12px;  /* 减少内边距 */
+    gap: 8px;  /* 减少图标和内容间距 */
+}
+
+/* 快速导航紧凑化 */
+#overview-tab .action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);  /* 保持2列布局 */
+    gap: 10px;  /* 减少间距 */
+}
+
+#overview-tab .action-btn {
+    padding: 12px;  /* 减少按钮内边距 */
+    gap: 6px;  /* 减少图标和文字间距 */
+}
+
+#overview-tab .system-uptime {
+    padding: 12px;  /* 减少内边距 */
+    gap: 6px;
+}
+
+/* 健康状态卡片优化 */
+#overview-tab .health-score-container {
+    padding: 15px;  /* 减少内边距 */
+    margin-bottom: 15px;  /* 减少底边距 */
+}
+
+#overview-tab .health-score {
+    font-size: 36px;  /* 稍微减小字号 */
+}
+
+#overview-tab .health-stats {
+    gap: 8px;  /* 减少统计项间距 */
+}
+
+/* 响应式调整 */
+@media (max-width: 1024px) {
+    #overview-tab .overview-row {
+        grid-template-columns: 1fr;  /* 中等屏幕单列 */
+    }
+    
+    #overview-tab .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);  /* 保持2列 */
+    }
+    
+    #overview-tab .summary-grid {
+        grid-template-columns: repeat(2, 1fr);  /* 改为2行2列 */
+    }
+}
+
+@media (max-width: 768px) {
+    #overview-tab .info-grid {
+        grid-template-columns: repeat(2, 1fr);  /* 小屏幕2列 */
+    }
+    
+    #overview-tab .metrics-grid {
+        grid-template-columns: 1fr;  /* 单列 */
+    }
+    
+    #overview-tab .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    #overview-tab .action-grid {
+        grid-template-columns: 1fr;  /* 快速导航单列 */
+    }
+}
+
+@media (max-width: 480px) {
+    #overview-tab .info-grid {
+        grid-template-columns: 1fr;  /* 超小屏幕单列 */
+    }
+    
+    #overview-tab .summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Process Management Styles */
 .kill-process-btn {
     background: #e53e3e;
