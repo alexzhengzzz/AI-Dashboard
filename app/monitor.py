@@ -488,6 +488,188 @@ class SystemMonitor:
                 'message': f'操作失败: {str(e)}'
             }
     
+    def get_system_health_info(self):
+        """获取系统健康状态信息"""
+        cpu_info = self.get_cpu_info()
+        memory_info = self.get_memory_info()
+        disk_info = self.get_disk_info()
+        
+        # 计算系统健康评分（0-100）
+        health_score = 100
+        warnings = []
+        
+        # CPU评分
+        if cpu_info['usage_percent'] > 90:
+            health_score -= 30
+            warnings.append('CPU使用率过高')
+        elif cpu_info['usage_percent'] > 70:
+            health_score -= 15
+            warnings.append('CPU使用率较高')
+        
+        # 内存评分
+        if memory_info['percent'] > 90:
+            health_score -= 30
+            warnings.append('内存使用率过高')
+        elif memory_info['percent'] > 80:
+            health_score -= 15
+            warnings.append('内存使用率较高')
+        
+        # 磁盘评分
+        for disk in disk_info:
+            if disk.get('percent', 0) > 95:
+                health_score -= 25
+                warnings.append(f'磁盘 {disk["mountpoint"]} 空间不足')
+            elif disk.get('percent', 0) > 85:
+                health_score -= 10
+                warnings.append(f'磁盘 {disk["mountpoint"]} 空间较满')
+        
+        # 负载评分
+        load_1min = cpu_info.get('load_avg', {}).get('1min', 0)
+        cpu_count = cpu_info.get('cpu_count', 1)
+        if load_1min > cpu_count * 2:
+            health_score -= 20
+            warnings.append('系统负载过高')
+        elif load_1min > cpu_count * 1.5:
+            health_score -= 10
+        
+        health_score = max(0, health_score)
+        
+        # 确定健康状态
+        if health_score >= 80:
+            status = 'excellent'
+            status_text = '优秀'
+        elif health_score >= 60:
+            status = 'good'
+            status_text = '良好'
+        elif health_score >= 40:
+            status = 'warning'
+            status_text = '警告'
+        else:
+            status = 'critical'
+            status_text = '严重'
+        
+        return {
+            'score': health_score,
+            'status': status,
+            'status_text': status_text,
+            'warnings': warnings
+        }
+    
+    def get_system_stats_summary(self):
+        """获取系统统计摘要"""
+        try:
+            # 进程统计
+            total_processes = len(psutil.pids())
+            running_processes = 0
+            sleeping_processes = 0
+            
+            for pid in psutil.pids():
+                try:
+                    proc = psutil.Process(pid)
+                    status = proc.status()
+                    if status == 'running':
+                        running_processes += 1
+                    elif status == 'sleeping':
+                        sleeping_processes += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            # 网络连接统计
+            connections = psutil.net_connections()
+            established_connections = len([c for c in connections if c.status == 'ESTABLISHED'])
+            listening_connections = len([c for c in connections if c.status == 'LISTEN'])
+            
+            # 用户统计
+            users = psutil.users()
+            active_users = len(set(user.name for user in users))
+            
+            return {
+                'processes': {
+                    'total': total_processes,
+                    'running': running_processes,
+                    'sleeping': sleeping_processes
+                },
+                'connections': {
+                    'established': established_connections,
+                    'listening': listening_connections
+                },
+                'users': {
+                    'active': active_users
+                }
+            }
+        except Exception as e:
+            return {
+                'processes': {'total': 0, 'running': 0, 'sleeping': 0},
+                'connections': {'established': 0, 'listening': 0},
+                'users': {'active': 0}
+            }
+    
+    def get_enhanced_system_info(self):
+        """获取增强的系统信息"""
+        base_info = self.get_system_info()
+        
+        # 添加更多详细信息
+        try:
+            import distro
+            os_name = distro.name()
+            os_version = distro.version()
+            os_codename = distro.codename()
+        except ImportError:
+            try:
+                with open('/etc/os-release', 'r') as f:
+                    os_info = {}
+                    for line in f:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            os_info[key] = value.strip('"')
+                    os_name = os_info.get('NAME', platform.system())
+                    os_version = os_info.get('VERSION', platform.release())
+                    os_codename = os_info.get('VERSION_CODENAME', '')
+            except:
+                os_name = platform.system()
+                os_version = platform.release()
+                os_codename = ''
+        
+        # 获取CPU详细信息
+        try:
+            cpu_freq = psutil.cpu_freq()
+            if cpu_freq:
+                cpu_freq_info = {
+                    'current': round(cpu_freq.current, 2),
+                    'min': round(cpu_freq.min, 2) if cpu_freq.min else 0,
+                    'max': round(cpu_freq.max, 2) if cpu_freq.max else 0
+                }
+            else:
+                cpu_freq_info = None
+        except:
+            cpu_freq_info = None
+        
+        # 获取内存详细信息
+        memory = psutil.virtual_memory()
+        
+        base_info.update({
+            'os_detailed': {
+                'name': os_name,
+                'version': os_version,
+                'codename': os_codename,
+                'kernel': platform.release(),
+                'arch': platform.machine()
+            },
+            'cpu_detailed': {
+                'count': psutil.cpu_count(),
+                'logical_count': psutil.cpu_count(logical=False) or psutil.cpu_count(),
+                'frequency': cpu_freq_info,
+                'model': platform.processor() or 'Unknown'
+            },
+            'memory_detailed': {
+                'total_gb': round(memory.total / (1024**3), 2),
+                'available_gb': round(memory.available / (1024**3), 2),
+                'used_gb': round(memory.used / (1024**3), 2)
+            }
+        })
+        
+        return base_info
+
     def get_all_stats(self):
         return {
             'timestamp': datetime.now().isoformat(),
@@ -495,7 +677,9 @@ class SystemMonitor:
             'memory': self.get_memory_info(),
             'disk': self.get_disk_info(),
             'network': self.get_network_info(),
-            'system': self.get_system_info(),
+            'system': self.get_enhanced_system_info(),
+            'health': self.get_system_health_info(),
+            'stats_summary': self.get_system_stats_summary(),
             'processes': self.get_process_info(),
             'memory_processes': self.get_memory_top_processes(),
             'services': self.get_services_status(),

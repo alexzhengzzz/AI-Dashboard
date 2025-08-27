@@ -28,7 +28,8 @@
 
         <!-- 系统概览标签页 -->
         <div id="overview-tab" class="tab-content active">
-            <div class="overview-grid">
+            <!-- 第一行：系统信息 + 健康状态 -->
+            <div class="overview-row">
                 <div class="card system-info-card">
                     <div class="card-header">
                         <h3>系统信息</h3>
@@ -56,7 +57,7 @@
                                 <div class="info-icon">💽</div>
                                 <div class="info-content">
                                     <label>操作系统</label>
-                                    <span id="os-info">-</span>
+                                    <span id="os-detailed">-</span>
                                 </div>
                             </div>
                             <div class="info-item">
@@ -67,51 +68,190 @@
                                 </div>
                             </div>
                             <div class="info-item">
-                                <div class="info-icon">📊</div>
+                                <div class="info-icon">🔧</div>
                                 <div class="info-content">
-                                    <label>负载平均</label>
-                                    <span id="load-avg">-</span>
+                                    <label>处理器</label>
+                                    <span id="cpu-model">-</span>
                                 </div>
                             </div>
                             <div class="info-item">
-                                <div class="info-icon">🔧</div>
+                                <div class="info-icon">💾</div>
                                 <div class="info-content">
-                                    <label>系统架构</label>
-                                    <span id="architecture">-</span>
+                                    <label>内存容量</label>
+                                    <span id="memory-total">-</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="quick-stats">
-                    <div class="stat-item cpu-stat">
-                        <div class="stat-header">
-                            <span class="stat-icon">⚡</span>
-                            <span class="stat-title">CPU</span>
-                        </div>
-                        <div class="stat-value" id="cpu-overview">0%</div>
+                <div class="card system-health-card">
+                    <div class="card-header">
+                        <h3>系统健康</h3>
                     </div>
-                    <div class="stat-item memory-stat">
-                        <div class="stat-header">
-                            <span class="stat-icon">💾</span>
-                            <span class="stat-title">内存</span>
+                    <div class="card-body">
+                        <div class="health-score-container">
+                            <div class="health-score" id="health-score">100</div>
+                            <div class="health-status" id="health-status">优秀</div>
                         </div>
-                        <div class="stat-value" id="memory-overview">0%</div>
+                        <div class="health-stats">
+                            <div class="health-stat">
+                                <span class="health-label">活跃进程</span>
+                                <span class="health-value" id="active-processes">0</span>
+                            </div>
+                            <div class="health-stat">
+                                <span class="health-label">网络连接</span>
+                                <span class="health-value" id="network-connections">0</span>
+                            </div>
+                            <div class="health-stat">
+                                <span class="health-label">登录用户</span>
+                                <span class="health-value" id="active-users">0</span>
+                            </div>
+                        </div>
+                        <div class="health-warnings" id="health-warnings">
+                            <!-- 动态生成警告信息 -->
+                        </div>
                     </div>
-                    <div class="stat-item disk-stat">
-                        <div class="stat-header">
-                            <span class="stat-icon">💿</span>
-                            <span class="stat-title">磁盘</span>
-                        </div>
-                        <div class="stat-value" id="disk-overview">0%</div>
+                </div>
+            </div>
+
+            <!-- 第二行：关键指标条 -->
+            <div class="overview-row">
+                <div class="card metrics-overview-card">
+                    <div class="card-header">
+                        <h3>关键指标</h3>
                     </div>
-                    <div class="stat-item network-stat">
-                        <div class="stat-header">
-                            <span class="stat-icon">🌍</span>
-                            <span class="stat-title">网络</span>
+                    <div class="card-body">
+                        <div class="metrics-grid">
+                            <div class="metric-item cpu-metric">
+                                <div class="metric-header">
+                                    <span class="metric-icon">⚡</span>
+                                    <span class="metric-title">CPU 使用率</span>
+                                </div>
+                                <div class="metric-content">
+                                    <div class="metric-value" id="cpu-overview">0%</div>
+                                    <div class="metric-bar">
+                                        <div class="metric-progress cpu-progress" id="cpu-progress-bar"></div>
+                                    </div>
+                                    <div class="metric-detail" id="cpu-load-detail">负载: 0.0</div>
+                                </div>
+                            </div>
+
+                            <div class="metric-item memory-metric">
+                                <div class="metric-header">
+                                    <span class="metric-icon">💾</span>
+                                    <span class="metric-title">内存使用</span>
+                                </div>
+                                <div class="metric-content">
+                                    <div class="metric-value" id="memory-overview">0%</div>
+                                    <div class="metric-bar">
+                                        <div class="metric-progress memory-progress" id="memory-progress-bar"></div>
+                                    </div>
+                                    <div class="metric-detail" id="memory-detail">0GB / 0GB</div>
+                                </div>
+                            </div>
+
+                            <div class="metric-item disk-metric">
+                                <div class="metric-header">
+                                    <span class="metric-icon">💿</span>
+                                    <span class="metric-title">磁盘使用</span>
+                                </div>
+                                <div class="metric-content">
+                                    <div class="metric-value" id="disk-overview">0%</div>
+                                    <div class="metric-bar">
+                                        <div class="metric-progress disk-progress" id="disk-progress-bar"></div>
+                                    </div>
+                                    <div class="metric-detail" id="disk-detail">0GB / 0GB</div>
+                                </div>
+                            </div>
+
+                            <div class="metric-item network-metric">
+                                <div class="metric-header">
+                                    <span class="metric-icon">🌍</span>
+                                    <span class="metric-title">网络流量</span>
+                                </div>
+                                <div class="metric-content">
+                                    <div class="metric-value" id="network-overview">0 MB/s</div>
+                                    <div class="network-speeds">
+                                        <div class="network-speed">
+                                            <span class="speed-label">↓</span>
+                                            <span class="speed-value" id="network-rx-speed">0</span>
+                                        </div>
+                                        <div class="network-speed">
+                                            <span class="speed-label">↑</span>
+                                            <span class="speed-value" id="network-tx-speed">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="stat-value" id="network-overview">0 MB</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第三行：状态摘要和快速链接 -->
+            <div class="overview-row">
+                <div class="card status-summary-card">
+                    <div class="card-header">
+                        <h3>状态摘要</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <div class="summary-icon">🔄</div>
+                                <div class="summary-content">
+                                    <div class="summary-label">总进程数</div>
+                                    <div class="summary-value" id="total-processes">0</div>
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-icon">🏃</div>
+                                <div class="summary-content">
+                                    <div class="summary-label">运行中</div>
+                                    <div class="summary-value" id="running-processes">0</div>
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-icon">🔗</div>
+                                <div class="summary-content">
+                                    <div class="summary-label">已建连接</div>
+                                    <div class="summary-value" id="established-connections">0</div>
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-icon">👥</div>
+                                <div class="summary-content">
+                                    <div class="summary-label">在线用户</div>
+                                    <div class="summary-value" id="online-users">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card quick-actions-card">
+                    <div class="card-header">
+                        <h3>快速导航</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="action-grid">
+                            <button class="action-btn" data-tab="resources">
+                                <span class="action-icon">📊</span>
+                                <span class="action-text">资源监控</span>
+                            </button>
+                            <button class="action-btn" data-tab="processes">
+                                <span class="action-icon">⚙️</span>
+                                <span class="action-text">进程管理</span>
+                            </button>
+                            <button class="action-btn" data-tab="services">
+                                <span class="action-icon">🔌</span>
+                                <span class="action-text">服务端口</span>
+                            </button>
+                            <div class="system-uptime">
+                                <span class="uptime-label">系统运行</span>
+                                <span class="uptime-value" id="system-uptime-days">0 天</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

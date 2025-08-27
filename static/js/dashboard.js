@@ -127,6 +127,8 @@ class Dashboard {
 
     updateDashboard(data) {
         this.updateSystemInfo(data.system);
+        this.updateSystemHealth(data.health);
+        this.updateStatsummary(data.stats_summary);
         this.updateCpuMetrics(data.cpu);
         this.updateMemoryMetrics(data.memory);
         this.updateDiskMetrics(data.disk);
@@ -136,8 +138,8 @@ class Dashboard {
         this.updateProcessList(data.processes);
         this.updateMemoryProcessList(data.memory_processes);
         
-        // 更新快速状态卡片
-        this.updateQuickStats(data);
+        // 更新概览页面的指标
+        this.updateOverviewMetrics(data);
         
         this.updateStatus(`最后更新: ${new Date().toLocaleTimeString()}`);
     }
@@ -145,16 +147,49 @@ class Dashboard {
     updateSystemInfo(system) {
         document.getElementById('hostname').textContent = system.hostname;
         document.getElementById('ip-address').textContent = system.ip_address || '获取中...';
-        document.getElementById('os-info').textContent = `${system.os} ${system.os_release}`;
+        
+        // 更新详细操作系统信息
+        if (system.os_detailed) {
+            document.getElementById('os-detailed').textContent = 
+                `${system.os_detailed.name} ${system.os_detailed.version}`;
+        } else {
+            document.getElementById('os-detailed').textContent = `${system.os} ${system.os_release}`;
+        }
+        
         document.getElementById('uptime').textContent = system.uptime_string;
-        document.getElementById('architecture').textContent = system.architecture;
+        
+        // 更新CPU型号信息
+        if (system.cpu_detailed) {
+            const cpuInfo = `${system.cpu_detailed.count}核 ${system.cpu_detailed.model || 'Unknown'}`;
+            document.getElementById('cpu-model').textContent = cpuInfo;
+        } else {
+            document.getElementById('cpu-model').textContent = system.processor || 'Unknown';
+        }
+        
+        // 更新内存容量信息
+        if (system.memory_detailed) {
+            document.getElementById('memory-total').textContent = `${system.memory_detailed.total_gb}GB`;
+        } else {
+            document.getElementById('memory-total').textContent = '获取中...';
+        }
+        
+        // 更新系统运行天数
+        if (system.uptime_seconds) {
+            const days = Math.floor(system.uptime_seconds / 86400);
+            const element = document.getElementById('system-uptime-days');
+            if (element) {
+                element.textContent = `${days} 天`;
+            }
+        }
     }
 
     updateCpuMetrics(cpu) {
         const usage = cpu.usage_percent;
-        document.getElementById('cpu-usage').textContent = usage.toFixed(1);
-        document.getElementById('load-avg').textContent = 
-            `${cpu.load_avg['1min']} ${cpu.load_avg['5min']} ${cpu.load_avg['15min']}`;
+        // 更新资源监控页面的CPU指标
+        const cpuUsageElement = document.getElementById('cpu-usage');
+        if (cpuUsageElement) {
+            cpuUsageElement.textContent = usage.toFixed(1);
+        }
 
         // 更新CPU状态
         const cpuStatus = document.getElementById('cpu-status');
@@ -169,6 +204,13 @@ class Dashboard {
                 cpuStatus.textContent = '正常';
                 cpuStatus.className = 'metric-status';
             }
+        }
+
+        // 更新负载平均值（如果元素存在）
+        const loadAvgElement = document.getElementById('load-avg');
+        if (loadAvgElement) {
+            loadAvgElement.textContent = 
+                `${cpu.load_avg['1min']} ${cpu.load_avg['5min']} ${cpu.load_avg['15min']}`;
         }
 
         // 更新CPU图表
@@ -242,6 +284,182 @@ class Dashboard {
                 diskInfo.appendChild(diskItem);
             }
         });
+    }
+
+    updateSystemHealth(health) {
+        if (!health) return;
+        
+        // 更新健康评分
+        const healthScore = document.getElementById('health-score');
+        const healthStatus = document.getElementById('health-status');
+        
+        if (healthScore) {
+            healthScore.textContent = health.score;
+        }
+        
+        if (healthStatus) {
+            healthStatus.textContent = health.status_text;
+            // 根据状态设置颜色类
+            const container = healthScore.parentElement;
+            container.className = 'health-score-container';
+            if (health.status === 'critical') {
+                container.classList.add('critical');
+            } else if (health.status === 'warning') {
+                container.classList.add('warning');
+            }
+        }
+        
+        // 更新警告信息
+        const warningsContainer = document.getElementById('health-warnings');
+        if (warningsContainer) {
+            warningsContainer.innerHTML = '';
+            if (health.warnings && health.warnings.length > 0) {
+                health.warnings.forEach(warning => {
+                    const warningDiv = document.createElement('div');
+                    warningDiv.className = 'health-warning';
+                    warningDiv.textContent = warning;
+                    warningsContainer.appendChild(warningDiv);
+                });
+            }
+        }
+    }
+    
+    updateStatsummary(stats) {
+        if (!stats) return;
+        
+        // 更新活跃进程数
+        const activeProcesses = document.getElementById('active-processes');
+        if (activeProcesses && stats.processes) {
+            activeProcesses.textContent = stats.processes.running;
+        }
+        
+        // 更新网络连接数
+        const networkConnections = document.getElementById('network-connections');
+        if (networkConnections && stats.connections) {
+            networkConnections.textContent = stats.connections.established;
+        }
+        
+        // 更新在线用户数
+        const activeUsers = document.getElementById('active-users');
+        if (activeUsers && stats.users) {
+            activeUsers.textContent = stats.users.active;
+        }
+        
+        // 更新状态摘要的数据
+        const totalProcesses = document.getElementById('total-processes');
+        if (totalProcesses && stats.processes) {
+            totalProcesses.textContent = stats.processes.total;
+        }
+        
+        const runningProcesses = document.getElementById('running-processes');
+        if (runningProcesses && stats.processes) {
+            runningProcesses.textContent = stats.processes.running;
+        }
+        
+        const establishedConnections = document.getElementById('established-connections');
+        if (establishedConnections && stats.connections) {
+            establishedConnections.textContent = stats.connections.established;
+        }
+        
+        const onlineUsers = document.getElementById('online-users');
+        if (onlineUsers && stats.users) {
+            onlineUsers.textContent = stats.users.active;
+        }
+    }
+    
+    updateOverviewMetrics(data) {
+        // 更新概览页面的CPU指标
+        const cpuOverview = document.getElementById('cpu-overview');
+        const cpuProgressBar = document.getElementById('cpu-progress-bar');
+        const cpuLoadDetail = document.getElementById('cpu-load-detail');
+        
+        if (cpuOverview && data.cpu) {
+            cpuOverview.textContent = `${data.cpu.usage_percent.toFixed(1)}%`;
+        }
+        
+        if (cpuProgressBar && data.cpu) {
+            cpuProgressBar.style.width = `${data.cpu.usage_percent}%`;
+        }
+        
+        if (cpuLoadDetail && data.cpu) {
+            cpuLoadDetail.textContent = `负载: ${data.cpu.load_avg['1min']}`;
+        }
+        
+        // 更新概览页面的内存指标
+        const memoryOverview = document.getElementById('memory-overview');
+        const memoryProgressBar = document.getElementById('memory-progress-bar');
+        const memoryDetail = document.getElementById('memory-detail');
+        
+        if (memoryOverview && data.memory) {
+            memoryOverview.textContent = `${data.memory.percent.toFixed(1)}%`;
+        }
+        
+        if (memoryProgressBar && data.memory) {
+            memoryProgressBar.style.width = `${data.memory.percent}%`;
+        }
+        
+        if (memoryDetail && data.memory) {
+            const usedGB = (data.memory.used / (1024**3)).toFixed(1);
+            const totalGB = (data.memory.total / (1024**3)).toFixed(1);
+            memoryDetail.textContent = `${usedGB}GB / ${totalGB}GB`;
+        }
+        
+        // 更新磁盘使用率
+        if (data.disk && data.disk.length > 0) {
+            const rootDisk = data.disk.find(d => d.mountpoint === '/') || data.disk[0];
+            const diskOverview = document.getElementById('disk-overview');
+            const diskProgressBar = document.getElementById('disk-progress-bar');
+            const diskDetail = document.getElementById('disk-detail');
+            
+            if (diskOverview && rootDisk) {
+                diskOverview.textContent = `${rootDisk.percent.toFixed(1)}%`;
+            }
+            
+            if (diskProgressBar && rootDisk) {
+                diskProgressBar.style.width = `${rootDisk.percent}%`;
+            }
+            
+            if (diskDetail && rootDisk) {
+                const usedGB = (rootDisk.used / (1024**3)).toFixed(1);
+                const totalGB = (rootDisk.total / (1024**3)).toFixed(1);
+                diskDetail.textContent = `${usedGB}GB / ${totalGB}GB`;
+            }
+        }
+        
+        // 更新网络流量显示
+        if (data.network) {
+            let totalRx = 0, totalTx = 0;
+            
+            data.network.forEach(iface => {
+                if (iface.interface !== 'lo') {
+                    totalRx += iface.bytes_recv;
+                    totalTx += iface.bytes_sent;
+                }
+            });
+            
+            const networkOverview = document.getElementById('network-overview');
+            const networkRxSpeed = document.getElementById('network-rx-speed');
+            const networkTxSpeed = document.getElementById('network-tx-speed');
+            
+            if (this.networkHistory.length > 0) {
+                const lastEntry = this.networkHistory[this.networkHistory.length - 1];
+                const rxRate = Math.max(0, (totalRx - lastEntry.rx) / (1024 * 1024 * 5)); // MB/s
+                const txRate = Math.max(0, (totalTx - lastEntry.tx) / (1024 * 1024 * 5)); // MB/s
+                
+                if (networkOverview) {
+                    const totalRate = (rxRate + txRate).toFixed(2);
+                    networkOverview.textContent = `${totalRate} MB/s`;
+                }
+                
+                if (networkRxSpeed) {
+                    networkRxSpeed.textContent = `${rxRate.toFixed(2)} MB/s`;
+                }
+                
+                if (networkTxSpeed) {
+                    networkTxSpeed.textContent = `${txRate.toFixed(2)} MB/s`;
+                }
+            }
+        }
     }
 
     updateNetworkMetrics(network) {
@@ -396,6 +614,20 @@ class Dashboard {
                         if (this.cpuChart) this.cpuChart.resize();
                         if (this.networkChart) this.networkChart.resize();
                     }, 100);
+                }
+            });
+        });
+        
+        // 初始化快速导航按钮
+        const actionBtns = document.querySelectorAll('.action-btn[data-tab]');
+        actionBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetTab = btn.dataset.tab;
+                
+                // 找到对应的标签按钮并触发点击
+                const targetTabBtn = document.querySelector(`.tab-btn[data-tab="${targetTab}"]`);
+                if (targetTabBtn) {
+                    targetTabBtn.click();
                 }
             });
         });
@@ -621,32 +853,6 @@ class Dashboard {
         }
     }
 
-    updateQuickStats(data) {
-        // 更新快速状态卡片
-        const cpuOverview = document.getElementById('cpu-overview');
-        const memoryOverview = document.getElementById('memory-overview');
-        const diskOverview = document.getElementById('disk-overview');
-        const networkOverview = document.getElementById('network-overview');
-        
-        if (cpuOverview) cpuOverview.textContent = `${data.cpu.usage_percent.toFixed(1)}%`;
-        if (memoryOverview) memoryOverview.textContent = `${data.memory.percent.toFixed(1)}%`;
-        
-        if (diskOverview && data.disk.length > 0) {
-            const rootDisk = data.disk.find(d => d.mountpoint === '/') || data.disk[0];
-            diskOverview.textContent = `${rootDisk.percent.toFixed(1)}%`;
-        }
-        
-        if (networkOverview) {
-            let totalRx = 0;
-            data.network.forEach(iface => {
-                if (iface.interface !== 'lo') {
-                    totalRx += iface.bytes_recv;
-                }
-            });
-            const rxMB = (totalRx / (1024**2)).toFixed(1);
-            networkOverview.textContent = `${rxMB} MB`;
-        }
-    }
     
     showExpandedChart(chartType) {
         const modal = document.getElementById('chart-modal');
