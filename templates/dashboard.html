@@ -7,6 +7,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- xterm.js 终端支持 -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@4.19.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.5.0/lib/xterm-addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.6.0/lib/xterm-addon-web-links.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@4.19.0/css/xterm.css" />
 </head>
 <body>
     <header class="header">
@@ -24,6 +29,7 @@
             <button class="tab-btn" data-tab="resources">资源监控</button>
             <button class="tab-btn" data-tab="processes">进程管理</button>
             <button class="tab-btn" data-tab="services">服务端口</button>
+            <button class="tab-btn" data-tab="terminal">🖥️ 终端</button>
         </nav>
 
         <!-- 系统概览标签页 -->
@@ -433,6 +439,67 @@
                     <div class="card-body">
                         <div id="ports-list" class="ports-list">
                             <!-- 动态生成端口状态 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 终端标签页 -->
+        <div id="terminal-tab" class="tab-content">
+            <div class="terminal-container">
+                <div class="card terminal-card">
+                    <div class="card-header">
+                        <h3>Web 终端</h3>
+                        <div class="terminal-controls">
+                            <button id="new-terminal-btn" class="btn btn-primary">新建终端</button>
+                            <button id="clear-terminal-btn" class="btn btn-secondary">清屏</button>
+                            <div class="terminal-tabs" id="terminal-tabs">
+                                <!-- 动态生成终端标签页 -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body terminal-body">
+                        <div class="terminal-content">
+                            <div id="no-terminal-message" class="no-terminal-message">
+                                <div class="welcome-icon">🖥️</div>
+                                <h4>欢迎使用Web终端</h4>
+                                <p>点击"新建终端"开始使用命令行界面</p>
+                                <div class="terminal-features">
+                                    <div class="feature-item">✅ 支持所有Linux命令</div>
+                                    <div class="feature-item">✅ 颜色高亮显示</div>
+                                    <div class="feature-item">✅ 手机端触屏友好</div>
+                                    <div class="feature-item">✅ 多终端会话支持</div>
+                                </div>
+                            </div>
+                            <div id="terminal-sessions" class="terminal-sessions">
+                                <!-- 动态生成终端会话 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 手机端虚拟按键 -->
+                        <div class="mobile-keyboard" id="mobile-keyboard">
+                            <div class="keyboard-row">
+                                <button class="key-btn" data-key="Tab">Tab</button>
+                                <button class="key-btn" data-key="Ctrl+C">Ctrl+C</button>
+                                <button class="key-btn" data-key="Ctrl+D">Ctrl+D</button>
+                                <button class="key-btn" data-key="Ctrl+Z">Ctrl+Z</button>
+                                <button class="key-btn" data-key="Escape">Esc</button>
+                            </div>
+                            <div class="keyboard-row">
+                                <button class="key-btn arrow-btn" data-key="ArrowUp">↑</button>
+                                <button class="key-btn arrow-btn" data-key="ArrowDown">↓</button>
+                                <button class="key-btn arrow-btn" data-key="ArrowLeft">←</button>
+                                <button class="key-btn arrow-btn" data-key="ArrowRight">→</button>
+                                <button class="key-btn" data-key="Enter">Enter</button>
+                            </div>
+                            <div class="keyboard-row">
+                                <button class="key-btn" data-key="Ctrl+L">Clear</button>
+                                <button class="key-btn" data-key="Home">Home</button>
+                                <button class="key-btn" data-key="End">End</button>
+                                <button class="key-btn" data-key="PageUp">PgUp</button>
+                                <button class="key-btn" data-key="PageDown">PgDn</button>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -14,6 +14,11 @@ class Dashboard {
         this.sortStates = {};
         this.toastId = 0;
         
+        // 终端相关状态
+        this.terminals = new Map();
+        this.currentTerminal = null;
+        this.terminalCounter = 0;
+        
         this.initSocketEvents();
         this.initCharts();
         this.startDataRefresh();
@@ -22,6 +27,7 @@ class Dashboard {
         this.initCollapse();
         this.initTableSorting();
         this.initFilters();
+        this.initTerminal();
     }
 
     initSocketEvents() {
@@ -43,6 +49,23 @@ class Dashboard {
         this.socket.on('connect_error', (error) => {
             console.error('Connection error:', error);
             this.updateStatus('连接错误');
+        });
+
+        // 终端WebSocket事件
+        this.socket.on('terminal_created', (data) => {
+            this.onTerminalCreated(data.session_id);
+        });
+
+        this.socket.on('terminal_output', (data) => {
+            this.onTerminalOutput(data.data);
+        });
+
+        this.socket.on('terminal_error', (data) => {
+            this.showToast(data.message, 'error');
+        });
+
+        this.socket.on('terminal_closed', (data) => {
+            this.onTerminalClosed(data.session_id);
         });
     }
 
@@ -1104,6 +1127,316 @@ class Dashboard {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
+
+    // 终端相关方法
+    initTerminal() {
+        // 延迟绑定事件，确保DOM已加载
+        setTimeout(() => {
+            const newTerminalBtn = document.getElementById('new-terminal-btn');
+            const clearTerminalBtn = document.getElementById('clear-terminal-btn');
+            
+            if (newTerminalBtn) {
+                newTerminalBtn.addEventListener('click', () => {
+                    console.log('New terminal button clicked');
+                    this.createNewTerminal();
+                });
+            } else {
+                console.log('New terminal button not found');
+            }
+
+            if (clearTerminalBtn) {
+                clearTerminalBtn.addEventListener('click', () => {
+                    this.clearCurrentTerminal();
+                });
+            }
+
+            // 初始化虚拟键盘
+            this.initMobileKeyboard();
+
+            // 检测移动设备
+            this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (this.isMobile) {
+                const mobileKeyboard = document.getElementById('mobile-keyboard');
+                if (mobileKeyboard) {
+                    mobileKeyboard.style.display = 'block';
+                }
+            }
+        }, 1000);
+    }
+
+    initMobileKeyboard() {
+        const keyboard = document.getElementById('mobile-keyboard');
+        if (keyboard) {
+            keyboard.addEventListener('click', (e) => {
+                if (e.target.classList.contains('key-btn')) {
+                    const key = e.target.dataset.key;
+                    this.sendKeyToTerminal(key);
+                }
+            });
+        }
+    }
+
+    sendKeyToTerminal(key) {
+        if (!this.currentTerminal) return;
+
+        let data = '';
+        switch (key) {
+            case 'Tab':
+                data = '\t';
+                break;
+            case 'Enter':
+                data = '\r';
+                break;
+            case 'Escape':
+                data = '\x1b';
+                break;
+            case 'ArrowUp':
+                data = '\x1b[A';
+                break;
+            case 'ArrowDown':
+                data = '\x1b[B';
+                break;
+            case 'ArrowRight':
+                data = '\x1b[C';
+                break;
+            case 'ArrowLeft':
+                data = '\x1b[D';
+                break;
+            case 'Home':
+                data = '\x1b[H';
+                break;
+            case 'End':
+                data = '\x1b[F';
+                break;
+            case 'PageUp':
+                data = '\x1b[5~';
+                break;
+            case 'PageDown':
+                data = '\x1b[6~';
+                break;
+            case 'Ctrl+C':
+                data = '\x03';
+                break;
+            case 'Ctrl+D':
+                data = '\x04';
+                break;
+            case 'Ctrl+Z':
+                data = '\x1a';
+                break;
+            case 'Ctrl+L':
+                data = '\x0c';
+                break;
+            default:
+                return;
+        }
+
+        this.socket.emit('terminal_input', {
+            session_id: this.currentTerminal.sessionId,
+            data: data
+        });
+    }
+
+    createNewTerminal() {
+        console.log('Creating new terminal...');
+        this.socket.emit('terminal_create');
+    }
+
+    onTerminalCreated(sessionId) {
+        console.log('Terminal created with session ID:', sessionId);
+        const terminalId = ++this.terminalCounter;
+        const terminalName = `终端 ${terminalId}`;
+
+        // 创建xterm终端实例
+        const terminal = new Terminal({
+            theme: {
+                background: '#1e1e1e',
+                foreground: '#ffffff',
+                cursor: '#ffffff',
+                selection: '#ffffff20',
+            },
+            fontSize: this.isMobile ? 12 : 14,
+            fontFamily: 'Monaco, "Lucida Console", monospace',
+            cursorBlink: true,
+            cursorStyle: 'block',
+            scrollback: 1000,
+            convertEol: true
+        });
+
+        // 创建插件
+        const fitAddon = new FitAddon.FitAddon();
+        const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+        
+        terminal.loadAddon(fitAddon);
+        terminal.loadAddon(webLinksAddon);
+
+        // 创建终端容器
+        const terminalDiv = document.createElement('div');
+        terminalDiv.className = 'terminal-instance';
+        terminalDiv.id = `terminal-${terminalId}`;
+        terminalDiv.style.display = 'none';
+
+        // 创建标签页
+        const terminalTab = document.createElement('div');
+        terminalTab.className = 'terminal-tab';
+        terminalTab.innerHTML = `
+            <span class="tab-title">${terminalName}</span>
+            <button class="close-terminal" data-terminal-id="${terminalId}" title="关闭终端">×</button>
+        `;
+
+        // 添加到DOM
+        document.getElementById('terminal-sessions').appendChild(terminalDiv);
+        document.getElementById('terminal-tabs').appendChild(terminalTab);
+
+        // 打开终端
+        terminal.open(terminalDiv);
+        fitAddon.fit();
+
+        // 存储终端信息
+        const terminalInfo = {
+            id: terminalId,
+            sessionId: sessionId,
+            terminal: terminal,
+            fitAddon: fitAddon,
+            div: terminalDiv,
+            tab: terminalTab,
+            name: terminalName
+        };
+
+        this.terminals.set(terminalId, terminalInfo);
+
+        // 设置为当前终端
+        this.switchToTerminal(terminalId);
+
+        // 绑定事件
+        terminal.onData((data) => {
+            this.socket.emit('terminal_input', {
+                session_id: sessionId,
+                data: data
+            });
+        });
+
+        terminal.onResize(({ cols, rows }) => {
+            this.socket.emit('terminal_resize', {
+                session_id: sessionId,
+                cols: cols,
+                rows: rows
+            });
+        });
+
+        // 标签页点击事件
+        terminalTab.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('close-terminal')) {
+                this.switchToTerminal(terminalId);
+            }
+        });
+
+        // 关闭按钮事件
+        terminalTab.querySelector('.close-terminal').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.closeTerminal(terminalId);
+        });
+
+        // 隐藏欢迎消息
+        document.getElementById('no-terminal-message').style.display = 'none';
+
+        // 窗口调整大小时重新适应
+        const resizeObserver = new ResizeObserver(() => {
+            if (this.currentTerminal && this.currentTerminal.id === terminalId) {
+                setTimeout(() => fitAddon.fit(), 100);
+            }
+        });
+        resizeObserver.observe(terminalDiv);
+
+        this.showToast(`${terminalName} 已创建`, 'success');
+    }
+
+    onTerminalOutput(data) {
+        console.log('Terminal output received:', data.substring(0, 100));
+        if (this.currentTerminal) {
+            this.currentTerminal.terminal.write(data);
+        } else {
+            console.log('No current terminal to write to');
+        }
+    }
+
+    onTerminalClosed(sessionId) {
+        // 找到对应的终端并关闭
+        for (const [id, terminal] of this.terminals) {
+            if (terminal.sessionId === sessionId) {
+                this.closeTerminalById(id);
+                break;
+            }
+        }
+    }
+
+    switchToTerminal(terminalId) {
+        const terminalInfo = this.terminals.get(terminalId);
+        if (!terminalInfo) return;
+
+        // 隐藏所有终端
+        this.terminals.forEach(terminal => {
+            terminal.div.style.display = 'none';
+            terminal.tab.classList.remove('active');
+        });
+
+        // 显示选中的终端
+        terminalInfo.div.style.display = 'block';
+        terminalInfo.tab.classList.add('active');
+
+        this.currentTerminal = terminalInfo;
+
+        // 重新适应大小和焦点
+        setTimeout(() => {
+            terminalInfo.fitAddon.fit();
+            terminalInfo.terminal.focus();
+        }, 100);
+    }
+
+    closeTerminal(terminalId) {
+        const terminalInfo = this.terminals.get(terminalId);
+        if (!terminalInfo) return;
+
+        // 发送关闭信号到服务器
+        this.socket.emit('terminal_close', {
+            session_id: terminalInfo.sessionId
+        });
+
+        this.closeTerminalById(terminalId);
+    }
+
+    closeTerminalById(terminalId) {
+        const terminalInfo = this.terminals.get(terminalId);
+        if (!terminalInfo) return;
+
+        // 清理DOM
+        terminalInfo.div.remove();
+        terminalInfo.tab.remove();
+
+        // 清理终端实例
+        terminalInfo.terminal.dispose();
+
+        // 从Map中删除
+        this.terminals.delete(terminalId);
+
+        // 如果关闭的是当前终端，切换到另一个终端或显示欢迎消息
+        if (this.currentTerminal && this.currentTerminal.id === terminalId) {
+            if (this.terminals.size > 0) {
+                const firstTerminalId = this.terminals.keys().next().value;
+                this.switchToTerminal(firstTerminalId);
+            } else {
+                this.currentTerminal = null;
+                document.getElementById('no-terminal-message').style.display = 'block';
+            }
+        }
+
+        this.showToast(`${terminalInfo.name} 已关闭`, 'info');
+    }
+
+    clearCurrentTerminal() {
+        if (this.currentTerminal) {
+            this.currentTerminal.terminal.clear();
+        }
+    }
 }
 
 // 全局变量
@@ -1147,6 +1480,254 @@ style.textContent = `
 
 .metric-card .card-body {
     min-height: 200px;
+}
+
+/* 终端样式 */
+.terminal-container {
+    margin: 20px 0;
+}
+
+.terminal-card {
+    background: #2d3748;
+    border: 1px solid #4a5568;
+    border-radius: 8px;
+}
+
+.terminal-card .card-header {
+    background: #2d3748;
+    border-bottom: 1px solid #4a5568;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.terminal-card .card-header h3 {
+    color: #e2e8f0;
+    margin: 0;
+}
+
+.terminal-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.terminal-tabs {
+    display: flex;
+    gap: 5px;
+    margin-left: 15px;
+}
+
+.terminal-tab {
+    background: #4a5568;
+    border: 1px solid #718096;
+    border-radius: 4px 4px 0 0;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #cbd5e0;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.terminal-tab:hover {
+    background: #718096;
+}
+
+.terminal-tab.active {
+    background: #1e1e1e;
+    color: #ffffff;
+}
+
+.close-terminal {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+}
+
+.close-terminal:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.terminal-body {
+    background: #1e1e1e;
+    padding: 0;
+    min-height: 500px;
+}
+
+.terminal-content {
+    position: relative;
+    height: 100%;
+}
+
+.no-terminal-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 400px;
+    color: #a0aec0;
+    text-align: center;
+    padding: 40px;
+}
+
+.welcome-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.no-terminal-message h4 {
+    color: #e2e8f0;
+    margin: 0 0 10px 0;
+    font-size: 24px;
+}
+
+.no-terminal-message p {
+    margin: 0 0 30px 0;
+    font-size: 16px;
+}
+
+.terminal-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    max-width: 500px;
+}
+
+.feature-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 10px 15px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.terminal-sessions {
+    min-height: 500px;
+    position: relative;
+}
+
+.terminal-instance {
+    height: 500px;
+    padding: 0;
+}
+
+.terminal-instance .xterm {
+    padding: 15px;
+}
+
+.mobile-keyboard {
+    display: none;
+    background: #2d3748;
+    border-top: 1px solid #4a5568;
+    padding: 15px;
+}
+
+.keyboard-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.key-btn {
+    background: #4a5568;
+    border: 1px solid #718096;
+    color: #e2e8f0;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+    min-width: 50px;
+}
+
+.key-btn:hover {
+    background: #718096;
+}
+
+.key-btn:active {
+    background: #2d3748;
+}
+
+.arrow-btn {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+}
+
+.btn-primary {
+    background: #4c51bf;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #5a67d8;
+}
+
+.btn-secondary {
+    background: #718096;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4a5568;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .terminal-controls {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .terminal-tabs {
+        margin-left: 0;
+        margin-top: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .terminal-tab {
+        font-size: 12px;
+        padding: 6px 10px;
+    }
+    
+    .terminal-instance {
+        height: 400px;
+    }
+    
+    .terminal-sessions {
+        min-height: 400px;
+    }
+    
+    .mobile-keyboard {
+        display: block;
+    }
+    
+    .key-btn {
+        padding: 10px 8px;
+        min-width: 45px;
+        font-size: 11px;
+    }
 }
 `;
 document.head.appendChild(style);

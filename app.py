@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config.config import Config
 from app.auth import auth_manager
 from app.monitor import monitor
+from app.terminal import terminal_manager
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -90,6 +91,80 @@ def handle_stats_request():
         return False
     stats = monitor.get_all_stats()
     emit('stats_update', stats)
+
+# 终端会话映射：session_id -> client_sid
+terminal_client_map = {}
+
+# 终端相关的WebSocket事件处理
+@socketio.on('terminal_create')
+def handle_terminal_create():
+    """创建新的终端会话"""
+    if 'logged_in' not in session:
+        return False
+    
+    client_sid = request.sid
+    
+    def send_output(data):
+        socketio.emit('terminal_output', {'data': data}, room=client_sid)
+    
+    session_id = terminal_manager.create_session(send_output)
+    if session_id:
+        terminal_client_map[session_id] = client_sid
+        emit('terminal_created', {'session_id': session_id})
+        print(f"Terminal session created: {session_id} for client: {client_sid}")
+    else:
+        emit('terminal_error', {'message': '创建终端会话失败'})
+
+@socketio.on('terminal_input')
+def handle_terminal_input(data):
+    """处理终端输入"""
+    if 'logged_in' not in session:
+        return False
+    
+    session_id = data.get('session_id')
+    input_data = data.get('data', '')
+    
+    print(f"Terminal input received: session={session_id}, data={repr(input_data)}")
+    
+    if session_id:
+        terminal_manager.write_to_session(session_id, input_data)
+
+@socketio.on('terminal_resize')
+def handle_terminal_resize(data):
+    """调整终端大小"""
+    if 'logged_in' not in session:
+        return False
+    
+    session_id = data.get('session_id')
+    rows = data.get('rows', 24)
+    cols = data.get('cols', 80)
+    
+    if session_id:
+        terminal_manager.resize_session(session_id, rows, cols)
+
+@socketio.on('terminal_close')
+def handle_terminal_close(data):
+    """关闭终端会话"""
+    if 'logged_in' not in session:
+        return False
+    
+    session_id = data.get('session_id')
+    if session_id:
+        terminal_manager.close_session(session_id)
+        if session_id in terminal_client_map:
+            del terminal_client_map[session_id]
+        emit('terminal_closed', {'session_id': session_id})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """处理客户端断开连接"""
+    client_sid = request.sid
+    # 清理该客户端的所有终端会话
+    sessions_to_close = [sid for sid, cid in terminal_client_map.items() if cid == client_sid]
+    for session_id in sessions_to_close:
+        terminal_manager.close_session(session_id)
+        del terminal_client_map[session_id]
+    print(f"Client {client_sid} disconnected, closed {len(sessions_to_close)} terminal sessions")
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
