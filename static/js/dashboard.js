@@ -223,7 +223,6 @@ class Dashboard {
         this.updateNetworkMetrics(data.network);
         this.updateServicesStatus(data.services);
         this.updatePortsStatus(data.ports);
-        this.updateProcessList(data.processes);
         this.updateMemoryProcessList(data.memory_processes);
         
         // 更新概览页面的指标（在网络数据更新后）
@@ -793,20 +792,32 @@ class Dashboard {
                     bValue = parseInt(b.cells[0].textContent) || 0;
                     break;
                 case 'name':
-                case 'user':
                     aValue = a.cells[1].textContent.toLowerCase();
                     bValue = b.cells[1].textContent.toLowerCase();
                     break;
+                case 'user':
+                    aValue = a.cells[2].textContent.toLowerCase();
+                    bValue = b.cells[2].textContent.toLowerCase();
+                    break;
+                case 'category':
+                    aValue = a.cells[3].textContent.toLowerCase();
+                    bValue = b.cells[3].textContent.toLowerCase();
+                    break;
+                case 'status':
+                    aValue = a.cells[7].textContent.toLowerCase();
+                    bValue = b.cells[7].textContent.toLowerCase();
+                    break;
                 case 'cpu':
-                case 'memory':
-                case 'memory-percent':
-                    const cellIndex = sortKey === 'cpu' ? 2 : sortKey === 'memory' ? 3 : sortKey === 'memory-percent' ? 4 : 3;
-                    aValue = parseFloat(a.cells[cellIndex].textContent) || 0;
-                    bValue = parseFloat(b.cells[cellIndex].textContent) || 0;
+                    aValue = parseFloat(a.cells[6].textContent) || 0;
+                    bValue = parseFloat(b.cells[6].textContent) || 0;
                     break;
                 case 'memory-mb':
-                    aValue = parseInt(a.cells[3].textContent) || 0;
-                    bValue = parseInt(b.cells[3].textContent) || 0;
+                    aValue = parseInt(a.cells[4].textContent) || 0;
+                    bValue = parseInt(b.cells[4].textContent) || 0;
+                    break;
+                case 'memory-percent':
+                    aValue = parseFloat(a.cells[5].textContent) || 0;
+                    bValue = parseFloat(b.cells[5].textContent) || 0;
                     break;
                 default:
                     aValue = a.cells[0].textContent.toLowerCase();
@@ -1095,30 +1106,6 @@ class Dashboard {
         }
     }
 
-    updateProcessList(processes) {
-        const tbody = document.getElementById('processes-tbody');
-        tbody.innerHTML = '';
-
-        processes.slice(0, 10).forEach(proc => {
-            const row = document.createElement('tr');
-            const canKill = proc.username !== 'root' || proc.pid > 1000;
-            
-            row.innerHTML = `
-                <td>${proc.pid || '-'}</td>
-                <td>${proc.name || '-'}</td>
-                <td>${(proc.cpu_percent || 0).toFixed(1)}%</td>
-                <td>${(proc.memory_percent || 0).toFixed(1)}%</td>
-                <td>${proc.status || '-'}</td>
-                <td>
-                    ${canKill ? 
-                        `<button class="kill-process-btn" onclick="dashboard.confirmKillProcess(${proc.pid}, '${proc.name}', ${(proc.cpu_percent || 0).toFixed(1)})">终止</button>` :
-                        '<span class="protected-process">受保护</span>'
-                    }
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
-    }
 
     updateMemoryProcessList(memoryProcesses) {
         const tbody = document.getElementById('memory-processes-tbody');
