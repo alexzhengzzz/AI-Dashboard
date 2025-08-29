@@ -13,12 +13,14 @@ class SystemMonitor:
         self.boot_time = datetime.fromtimestamp(psutil.boot_time())
         
     def get_cpu_info(self):
-        cpu_percent = psutil.cpu_percent(interval=1, percpu=True)
+        # 只调用一次 psutil.cpu_percent 来获取总体和每个CPU的使用率
+        cpu_percent_total = psutil.cpu_percent(interval=1)
+        cpu_percent_per_cpu = psutil.cpu_percent(interval=0.1, percpu=True)
         load_avg = os.getloadavg() if hasattr(os, 'getloadavg') else [0, 0, 0]
         
         return {
-            'usage_percent': round(psutil.cpu_percent(interval=1), 2),
-            'usage_per_cpu': [round(cpu, 2) for cpu in cpu_percent],
+            'usage_percent': round(cpu_percent_total, 2),
+            'usage_per_cpu': [round(cpu, 2) for cpu in cpu_percent_per_cpu],
             'load_avg': {
                 '1min': round(load_avg[0], 2),
                 '5min': round(load_avg[1], 2),
