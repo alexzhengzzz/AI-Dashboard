@@ -42,6 +42,7 @@ class MonitorService:
                 'network': self.system_monitor.get_network_info(),
                 'system': self._get_cached_system_info(),
                 'health': self.health_monitor.get_system_health_info(),
+                'system_stats': self.health_monitor.get_system_statistics(),
                 'stats_summary': self.process_monitor.get_system_stats_summary(),
                 'memory_processes': self.process_monitor.get_memory_top_processes(),
                 'services': self._get_cached_services_status(),
@@ -186,6 +187,10 @@ class MonitorService:
     def get_system_health_info(self) -> Dict[str, Any]:
         """获取系统健康状态"""
         return self.health_monitor.get_system_health_info()
+    
+    def get_system_statistics(self) -> Dict[str, Any]:
+        """获取系统统计信息"""
+        return self.health_monitor.get_system_statistics()
     
     def get_performance_recommendations(self) -> Dict[str, Any]:
         """获取性能优化建议"""

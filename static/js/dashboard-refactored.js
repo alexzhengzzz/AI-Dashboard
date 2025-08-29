@@ -18,6 +18,9 @@ class Dashboard extends DashboardCore {
         // 启动自动刷新
         this.startDataRefresh();
         
+        // 初始化交互事件
+        this.initializeOverviewInteractions();
+        
         console.log('重构后的Dashboard已初始化');
     }
     
@@ -34,6 +37,64 @@ class Dashboard extends DashboardCore {
                 this.requestStats();
             }
         }, this.updateInterval);
+    }
+    
+    /**
+     * 初始化概览页面交互
+     */
+    initializeOverviewInteractions() {
+        // 监控面板点击跳转
+        document.querySelectorAll('.monitor-item[data-tab]').forEach(item => {
+            item.addEventListener('click', () => {
+                const tabName = item.dataset.tab;
+                if (tabName) {
+                    this.switchTab(tabName);
+                }
+            });
+        });
+        
+        // 统计项点击跳转
+        document.querySelectorAll('.stat-item[data-tab]').forEach(item => {
+            item.addEventListener('click', () => {
+                const tabName = item.dataset.tab;
+                if (tabName) {
+                    this.switchTab(tabName);
+                }
+            });
+        });
+        
+        // 导航按钮点击
+        document.querySelectorAll('.nav-btn[data-tab]').forEach(button => {
+            button.addEventListener('click', () => {
+                const tabName = button.dataset.tab;
+                if (tabName) {
+                    this.switchTab(tabName);
+                }
+            });
+        });
+        
+        // 添加hover效果
+        this.addHoverEffects();
+    }
+    
+    /**
+     * 添加hover效果
+     */
+    addHoverEffects() {
+        // 为可点击的卡片添加hover样式
+        const clickableItems = document.querySelectorAll('.monitor-item[data-tab], .stat-item[data-tab]');
+        clickableItems.forEach(item => {
+            item.style.cursor = 'pointer';
+            item.addEventListener('mouseenter', () => {
+                item.style.transform = 'translateY(-2px)';
+                item.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                item.style.transition = 'all 0.2s ease';
+            });
+            item.addEventListener('mouseleave', () => {
+                item.style.transform = 'translateY(0)';
+                item.style.boxShadow = '';
+            });
+        });
     }
     
     /**
@@ -138,6 +199,7 @@ class Dashboard extends DashboardCore {
         // 只更新有变化的部分
         if (data.system) this.updateSystemOverview(data);
         if (data.health) this.updateHealthStatus(data.health);
+        if (data.system_stats) this.updateSystemStatistics(data.system_stats);
         if (data.cpu) this.monitoringModule.updateCPUInfo(data.cpu);
         if (data.memory) this.monitoringModule.updateMemoryInfo(data.memory);
         if (data.disk) this.monitoringModule.updateDiskInfo(data.disk);
@@ -173,18 +235,31 @@ class Dashboard extends DashboardCore {
             this.updateHealthStatus(data.health);
         }
         
-        // 快速统计
+        // 系统统计
+        if (data.system_stats) {
+            this.updateSystemStatistics(data.system_stats);
+        }
+        
+        // 快速统计（向后兼容）
         if (data.stats_summary) {
             this.updateQuickStats(data.stats_summary);
         }
         
-        // CPU和内存概览
+        // 实时监控面板更新
         if (data.cpu) {
-            this.updateCPUOverview(data.cpu);
+            this.updateRealtimeMonitoring('cpu', data.cpu);
         }
         
         if (data.memory) {
-            this.updateMemoryOverview(data.memory);
+            this.updateRealtimeMonitoring('memory', data.memory);
+        }
+        
+        if (data.disk) {
+            this.updateRealtimeMonitoring('disk', data.disk);
+        }
+        
+        if (data.network) {
+            this.updateRealtimeMonitoring('network', data.network);
         }
     }
     
@@ -253,7 +328,57 @@ class Dashboard extends DashboardCore {
     }
     
     /**
-     * 更新快速统计
+     * 更新系统统计
+     */
+    updateSystemStatistics(systemStats) {
+        if (!systemStats) return;
+        
+        // 更新进程统计
+        if (systemStats.processes) {
+            this.updateElement('total-processes', systemStats.processes.total?.toLocaleString() || '0');
+            this.updateElement('running-processes', systemStats.processes.running?.toLocaleString() || '0');
+        }
+        
+        // 更新网络连接统计
+        if (systemStats.network) {
+            this.updateElement('established-connections', systemStats.network.established?.toLocaleString() || '0');
+            this.updateElement('listening-ports', systemStats.network.listen?.toLocaleString() || '0');
+        }
+        
+        // 更新用户统计
+        if (systemStats.users) {
+            this.updateElement('online-users', systemStats.users.unique_users?.toLocaleString() || '0');
+            this.updateElement('user-sessions', systemStats.users.total_sessions?.toLocaleString() || '0');
+        }
+        
+        // 更新系统运行时间
+        if (systemStats.system) {
+            this.updateElement('system-uptime', systemStats.system.uptime_string || '未知');
+        }
+        
+        // 更新系统警告（基于健康状态）
+        if (this.healthStatus) {
+            const totalAlerts = (this.healthStatus.warnings?.length || 0) + (this.healthStatus.critical_issues?.length || 0);
+            const criticalAlerts = this.healthStatus.critical_issues?.length || 0;
+            this.updateElement('system-alerts', totalAlerts.toString());
+            this.updateElement('critical-alerts', criticalAlerts.toString());
+        }
+    }
+    
+    /**
+     * 更新系统运行时间
+     */
+    updateSystemUptime(systemStats) {
+        if (systemStats?.system) {
+            // 更新概览中的运行时间
+            this.updateElement('system-uptime', systemStats.system.uptime_string || '未知');
+            // 为了向后兼容，同时更新原有的运行时间显示
+            this.updateElement('system-uptime-days', `${systemStats.system.uptime_days || 0} 天`);
+        }
+    }
+    
+    /**
+     * 更新快速统计（向后兼容）
      */
     updateQuickStats(statsData) {
         // 更新进程数量
@@ -276,22 +401,130 @@ class Dashboard extends DashboardCore {
     }
     
     /**
-     * 更新CPU概览
+     * 更新实时监控面板
+     */
+    updateRealtimeMonitoring(type, data) {
+        switch (type) {
+            case 'cpu':
+                this.updateCPUMonitoring(data);
+                break;
+            case 'memory':
+                this.updateMemoryMonitoring(data);
+                break;
+            case 'disk':
+                this.updateDiskMonitoring(data);
+                break;
+            case 'network':
+                this.updateNetworkMonitoring(data);
+                break;
+        }
+    }
+    
+    /**
+     * 更新CPU监控
+     */
+    updateCPUMonitoring(cpuData) {
+        const usage = cpuData.usage_percent || 0;
+        const loadAvg = cpuData.load_avg?.['1min'] || 0;
+        
+        this.updateElement('cpu-overview', `${usage.toFixed(1)}%`);
+        this.updateElement('cpu-load-detail', `负载: ${loadAvg}`);
+        
+        // 更新进度条
+        const progressBar = document.getElementById('cpu-progress-bar');
+        if (progressBar) {
+            progressBar.style.width = `${Math.min(usage, 100)}%`;
+            progressBar.className = `monitor-progress cpu-progress ${this.getUsageClass(usage)}`;
+        }
+        
+        // 更新监控指示器颜色
+        this.updateMonitoringIndicator();
+    }
+    
+    /**
+     * 更新内存监控
+     */
+    updateMemoryMonitoring(memoryData) {
+        const usage = memoryData.percent || 0;
+        const usedGB = this.formatBytes(memoryData.used);
+        const totalGB = this.formatBytes(memoryData.total);
+        
+        this.updateElement('memory-overview', `${usage.toFixed(1)}%`);
+        this.updateElement('memory-detail', `${usedGB} / ${totalGB}`);
+        
+        // 更新进度条
+        const progressBar = document.getElementById('memory-progress-bar');
+        if (progressBar) {
+            progressBar.style.width = `${Math.min(usage, 100)}%`;
+            progressBar.className = `monitor-progress memory-progress ${this.getUsageClass(usage)}`;
+        }
+    }
+    
+    /**
+     * 更新磁盘监控
+     */
+    updateDiskMonitoring(diskData) {
+        if (!diskData || !Array.isArray(diskData) || diskData.length === 0) return;
+        
+        // 获取主要磁盘（通常是根分区）
+        const mainDisk = diskData.find(disk => disk.mountpoint === '/') || diskData[0];
+        const usage = mainDisk.percent || 0;
+        const usedGB = this.formatBytes(mainDisk.used);
+        const totalGB = this.formatBytes(mainDisk.total);
+        
+        this.updateElement('disk-overview', `${usage.toFixed(1)}%`);
+        this.updateElement('disk-detail', `${usedGB} / ${totalGB}`);
+        
+        // 更新进度条
+        const progressBar = document.getElementById('disk-progress-bar');
+        if (progressBar) {
+            progressBar.style.width = `${Math.min(usage, 100)}%`;
+            progressBar.className = `monitor-progress disk-progress ${this.getUsageClass(usage)}`;
+        }
+    }
+    
+    /**
+     * 更新网络监控
+     */
+    updateNetworkMonitoring(networkData) {
+        if (!networkData || !Array.isArray(networkData) || networkData.length === 0) return;
+        
+        // 计算所有网络接口的总流量
+        let totalRxBytes = 0;
+        let totalTxBytes = 0;
+        
+        networkData.forEach(interface => {
+            totalRxBytes += interface.bytes_recv || 0;
+            totalTxBytes += interface.bytes_sent || 0;
+        });
+        
+        // 计算网络速度（这里需要与上次的数据比较，简化处理显示总量）
+        const rxSpeed = this.formatBytes(totalRxBytes);
+        const txSpeed = this.formatBytes(totalTxBytes);
+        
+        this.updateElement('network-overview', `${this.formatBytes(totalRxBytes + totalTxBytes)}`);
+        this.updateElement('network-rx-speed', rxSpeed);
+        this.updateElement('network-tx-speed', txSpeed);
+    }
+    
+    /**
+     * 更新监控指示器
+     */
+    updateMonitoringIndicator() {
+        const indicator = document.getElementById('monitoring-indicator');
+        if (indicator) {
+            indicator.style.color = '#4ade80'; // 绿色表示正在更新
+            setTimeout(() => {
+                indicator.style.color = '#6b7280'; // 灰色表示待机
+            }, 500);
+        }
+    }
+    
+    /**
+     * 更新CPU概览（向后兼容）
      */
     updateCPUOverview(cpuData) {
-        const cpuOverviewElement = document.getElementById('cpu-overview');
-        if (cpuOverviewElement) {
-            const usage = cpuData.usage_percent || 0;
-            cpuOverviewElement.innerHTML = `
-                <div class="metric-header">
-                    <span>CPU使用率</span>
-                    <span class="metric-value ${this.getUsageClass(usage)}">${usage}%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill ${this.getUsageClass(usage)}" style="width: ${usage}%"></div>
-                </div>
-            `;
-        }
+        this.updateCPUMonitoring(cpuData);
     }
     
     /**

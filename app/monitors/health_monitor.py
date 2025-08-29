@@ -281,3 +281,136 @@ class HealthMonitor(BaseMonitor):
             pass
         
         return alerts
+    
+    def get_system_statistics(self) -> Dict[str, Any]:
+        """获取系统统计信息，整合进程、连接、用户等统计数据"""
+        stats = {
+            'processes': self._get_process_statistics(),
+            'network': self._get_network_statistics(),
+            'users': self._get_user_statistics(),
+            'system': self._get_system_runtime_statistics()
+        }
+        return stats
+    
+    def _get_process_statistics(self) -> Dict[str, int]:
+        """获取进程统计"""
+        try:
+            process_count = {
+                'total': 0,
+                'running': 0,
+                'sleeping': 0,
+                'zombie': 0,
+                'stopped': 0
+            }
+            
+            for proc in psutil.process_iter(['status']):
+                try:
+                    status = proc.info['status']
+                    process_count['total'] += 1
+                    
+                    if status == psutil.STATUS_RUNNING:
+                        process_count['running'] += 1
+                    elif status == psutil.STATUS_SLEEPING:
+                        process_count['sleeping'] += 1
+                    elif status == psutil.STATUS_ZOMBIE:
+                        process_count['zombie'] += 1
+                    elif status == psutil.STATUS_STOPPED:
+                        process_count['stopped'] += 1
+                        
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            return process_count
+        except Exception:
+            return {'total': 0, 'running': 0, 'sleeping': 0, 'zombie': 0, 'stopped': 0}
+    
+    def _get_network_statistics(self) -> Dict[str, int]:
+        """获取网络连接统计"""
+        try:
+            connections = psutil.net_connections()
+            connection_stats = {
+                'total': len(connections),
+                'established': 0,
+                'listen': 0,
+                'time_wait': 0,
+                'close_wait': 0
+            }
+            
+            for conn in connections:
+                if conn.status == 'ESTABLISHED':
+                    connection_stats['established'] += 1
+                elif conn.status == 'LISTEN':
+                    connection_stats['listen'] += 1
+                elif conn.status == 'TIME_WAIT':
+                    connection_stats['time_wait'] += 1
+                elif conn.status == 'CLOSE_WAIT':
+                    connection_stats['close_wait'] += 1
+            
+            return connection_stats
+        except Exception:
+            return {'total': 0, 'established': 0, 'listen': 0, 'time_wait': 0, 'close_wait': 0}
+    
+    def _get_user_statistics(self) -> Dict[str, Any]:
+        """获取用户会话统计"""
+        try:
+            users = psutil.users()
+            user_stats = {
+                'total_sessions': len(users),
+                'unique_users': len(set(user.name for user in users)),
+                'user_list': []
+            }
+            
+            # 获取用户详情
+            user_detail = {}
+            for user in users:
+                if user.name not in user_detail:
+                    user_detail[user.name] = {
+                        'name': user.name,
+                        'sessions': 0,
+                        'terminals': []
+                    }
+                user_detail[user.name]['sessions'] += 1
+                if user.terminal:
+                    user_detail[user.name]['terminals'].append(user.terminal)
+            
+            user_stats['user_list'] = list(user_detail.values())
+            return user_stats
+        except Exception:
+            return {'total_sessions': 0, 'unique_users': 0, 'user_list': []}
+    
+    def _get_system_runtime_statistics(self) -> Dict[str, Any]:
+        """获取系统运行时统计"""
+        try:
+            boot_time = psutil.boot_time()
+            current_time = psutil.time.time()
+            uptime_seconds = int(current_time - boot_time)
+            
+            # 计算运行时间
+            days = uptime_seconds // 86400
+            hours = (uptime_seconds % 86400) // 3600
+            minutes = (uptime_seconds % 3600) // 60
+            
+            uptime_string = f"{days}天{hours}小时{minutes}分钟" if days > 0 else f"{hours}小时{minutes}分钟"
+            
+            # 获取系统负载
+            load_avg = getattr(psutil, 'getloadavg', lambda: [0, 0, 0])()
+            
+            return {
+                'uptime_seconds': uptime_seconds,
+                'uptime_days': days,
+                'uptime_string': uptime_string,
+                'load_average_1min': round(load_avg[0], 2),
+                'load_average_5min': round(load_avg[1], 2),
+                'load_average_15min': round(load_avg[2], 2),
+                'cpu_count': psutil.cpu_count()
+            }
+        except Exception:
+            return {
+                'uptime_seconds': 0,
+                'uptime_days': 0,
+                'uptime_string': '未知',
+                'load_average_1min': 0,
+                'load_average_5min': 0,
+                'load_average_15min': 0,
+                'cpu_count': 1
+            }

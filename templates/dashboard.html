@@ -92,27 +92,19 @@
                     </div>
                 </div>
 
-                <div class="card system-health-card">
+                <div class="card system-status-card">
                     <div class="card-header">
-                        <h3>系统健康</h3>
+                        <h3>系统状态</h3>
                     </div>
                     <div class="card-body">
-                        <div class="health-score-container">
-                            <div class="health-score" id="health-score">100</div>
-                            <div class="health-status" id="health-status">优秀</div>
-                        </div>
-                        <div class="health-stats">
-                            <div class="health-stat">
-                                <span class="health-label">活跃进程</span>
-                                <span class="health-value" id="active-processes">0</span>
+                        <div class="status-main">
+                            <div class="health-score-container">
+                                <div class="health-score" id="health-score">100</div>
+                                <div class="health-status" id="health-status">优秀</div>
                             </div>
-                            <div class="health-stat">
-                                <span class="health-label">网络连接</span>
-                                <span class="health-value" id="network-connections">0</span>
-                            </div>
-                            <div class="health-stat">
-                                <span class="health-label">登录用户</span>
-                                <span class="health-value" id="active-users">0</span>
+                            <div class="uptime-info">
+                                <div class="uptime-label">系统运行时间</div>
+                                <div class="uptime-value" id="system-uptime">0 天</div>
                             </div>
                         </div>
                         <div class="health-warnings" id="health-warnings">
@@ -122,63 +114,56 @@
                 </div>
             </div>
 
-            <!-- 第二行：关键指标条 -->
+            <!-- 第二行：实时监控面板 -->
             <div class="overview-row">
-                <div class="card metrics-overview-card">
+                <div class="card realtime-monitoring-card">
                     <div class="card-header">
-                        <h3>关键指标</h3>
+                        <h3>实时监控</h3>
+                        <span class="monitoring-indicator" id="monitoring-indicator">●</span>
                     </div>
                     <div class="card-body">
-                        <div class="metrics-grid">
-                            <div class="metric-item cpu-metric">
-                                <div class="metric-header">
-                                    <span class="metric-icon">⚡</span>
-                                    <span class="metric-title">CPU 使用率</span>
-                                </div>
-                                <div class="metric-content">
-                                    <div class="metric-value" id="cpu-overview">0%</div>
-                                    <div class="metric-bar">
-                                        <div class="metric-progress cpu-progress" id="cpu-progress-bar"></div>
+                        <div class="monitoring-grid">
+                            <div class="monitor-item cpu-monitor" data-tab="resources">
+                                <div class="monitor-icon">⚡</div>
+                                <div class="monitor-content">
+                                    <div class="monitor-title">CPU</div>
+                                    <div class="monitor-value" id="cpu-overview">0%</div>
+                                    <div class="monitor-bar">
+                                        <div class="monitor-progress cpu-progress" id="cpu-progress-bar"></div>
                                     </div>
-                                    <div class="metric-detail" id="cpu-load-detail">负载: 0.0</div>
+                                    <div class="monitor-detail" id="cpu-load-detail">负载: 0.0</div>
                                 </div>
                             </div>
 
-                            <div class="metric-item memory-metric">
-                                <div class="metric-header">
-                                    <span class="metric-icon">💾</span>
-                                    <span class="metric-title">内存使用</span>
-                                </div>
-                                <div class="metric-content">
-                                    <div class="metric-value" id="memory-overview">0%</div>
-                                    <div class="metric-bar">
-                                        <div class="metric-progress memory-progress" id="memory-progress-bar"></div>
+                            <div class="monitor-item memory-monitor" data-tab="resources">
+                                <div class="monitor-icon">💾</div>
+                                <div class="monitor-content">
+                                    <div class="monitor-title">内存</div>
+                                    <div class="monitor-value" id="memory-overview">0%</div>
+                                    <div class="monitor-bar">
+                                        <div class="monitor-progress memory-progress" id="memory-progress-bar"></div>
                                     </div>
-                                    <div class="metric-detail" id="memory-detail">0GB / 0GB</div>
+                                    <div class="monitor-detail" id="memory-detail">0GB / 0GB</div>
                                 </div>
                             </div>
 
-                            <div class="metric-item disk-metric">
-                                <div class="metric-header">
-                                    <span class="metric-icon">💿</span>
-                                    <span class="metric-title">磁盘使用</span>
-                                </div>
-                                <div class="metric-content">
-                                    <div class="metric-value" id="disk-overview">0%</div>
-                                    <div class="metric-bar">
-                                        <div class="metric-progress disk-progress" id="disk-progress-bar"></div>
+                            <div class="monitor-item disk-monitor" data-tab="resources">
+                                <div class="monitor-icon">💿</div>
+                                <div class="monitor-content">
+                                    <div class="monitor-title">磁盘</div>
+                                    <div class="monitor-value" id="disk-overview">0%</div>
+                                    <div class="monitor-bar">
+                                        <div class="monitor-progress disk-progress" id="disk-progress-bar"></div>
                                     </div>
-                                    <div class="metric-detail" id="disk-detail">0GB / 0GB</div>
+                                    <div class="monitor-detail" id="disk-detail">0GB / 0GB</div>
                                 </div>
                             </div>
 
-                            <div class="metric-item network-metric">
-                                <div class="metric-header">
-                                    <span class="metric-icon">🌍</span>
-                                    <span class="metric-title">网络流量</span>
-                                </div>
-                                <div class="metric-content">
-                                    <div class="metric-value" id="network-overview">0 MB/s</div>
+                            <div class="monitor-item network-monitor" data-tab="resources">
+                                <div class="monitor-icon">🌐</div>
+                                <div class="monitor-content">
+                                    <div class="monitor-title">网络</div>
+                                    <div class="monitor-value" id="network-overview">0 MB/s</div>
                                     <div class="network-speeds">
                                         <div class="network-speed">
                                             <span class="speed-label">↓</span>
@@ -196,68 +181,92 @@
                 </div>
             </div>
 
-            <!-- 第三行：状态摘要和快速链接 -->
+            <!-- 第三行：系统统计和导航 -->
             <div class="overview-row">
-                <div class="card status-summary-card">
+                <div class="card system-statistics-card">
                     <div class="card-header">
-                        <h3>状态摘要</h3>
+                        <h3>系统统计</h3>
                     </div>
                     <div class="card-body">
-                        <div class="summary-grid">
-                            <div class="summary-item">
-                                <div class="summary-icon">🔄</div>
-                                <div class="summary-content">
-                                    <div class="summary-label">总进程数</div>
-                                    <div class="summary-value" id="total-processes">0</div>
+                        <div class="statistics-grid">
+                            <div class="stat-item" data-tab="processes">
+                                <div class="stat-icon">🔄</div>
+                                <div class="stat-content">
+                                    <div class="stat-value" id="total-processes">0</div>
+                                    <div class="stat-label">总进程</div>
+                                    <div class="stat-detail">
+                                        运行: <span id="running-processes">0</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="summary-item">
-                                <div class="summary-icon">🏃</div>
-                                <div class="summary-content">
-                                    <div class="summary-label">运行中</div>
-                                    <div class="summary-value" id="running-processes">0</div>
+                            <div class="stat-item" data-tab="services">
+                                <div class="stat-icon">🔗</div>
+                                <div class="stat-content">
+                                    <div class="stat-value" id="established-connections">0</div>
+                                    <div class="stat-label">网络连接</div>
+                                    <div class="stat-detail">
+                                        监听: <span id="listening-ports">0</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="summary-item">
-                                <div class="summary-icon">🔗</div>
-                                <div class="summary-content">
-                                    <div class="summary-label">已建连接</div>
-                                    <div class="summary-value" id="established-connections">0</div>
+                            <div class="stat-item">
+                                <div class="stat-icon">👥</div>
+                                <div class="stat-content">
+                                    <div class="stat-value" id="online-users">0</div>
+                                    <div class="stat-label">登录用户</div>
+                                    <div class="stat-detail">
+                                        会话: <span id="user-sessions">0</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="summary-item">
-                                <div class="summary-icon">👥</div>
-                                <div class="summary-content">
-                                    <div class="summary-label">在线用户</div>
-                                    <div class="summary-value" id="online-users">0</div>
+                            <div class="stat-item">
+                                <div class="stat-icon">⚠️</div>
+                                <div class="stat-content">
+                                    <div class="stat-value" id="system-alerts">0</div>
+                                    <div class="stat-label">系统警告</div>
+                                    <div class="stat-detail">
+                                        严重: <span id="critical-alerts">0</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="card quick-actions-card">
+                <div class="card quick-navigation-card">
                     <div class="card-header">
                         <h3>快速导航</h3>
                     </div>
                     <div class="card-body">
-                        <div class="action-grid">
-                            <button class="action-btn" data-tab="resources">
-                                <span class="action-icon">📊</span>
-                                <span class="action-text">资源监控</span>
+                        <div class="navigation-grid">
+                            <button class="nav-btn primary" data-tab="resources">
+                                <div class="nav-icon">📊</div>
+                                <div class="nav-content">
+                                    <div class="nav-title">资源监控</div>
+                                    <div class="nav-desc">实时系统资源</div>
+                                </div>
                             </button>
-                            <button class="action-btn" data-tab="processes">
-                                <span class="action-icon">⚙️</span>
-                                <span class="action-text">进程管理</span>
+                            <button class="nav-btn secondary" data-tab="processes">
+                                <div class="nav-icon">⚙️</div>
+                                <div class="nav-content">
+                                    <div class="nav-title">进程管理</div>
+                                    <div class="nav-desc">进程与内存</div>
+                                </div>
                             </button>
-                            <button class="action-btn" data-tab="services">
-                                <span class="action-icon">🔌</span>
-                                <span class="action-text">服务端口</span>
+                            <button class="nav-btn tertiary" data-tab="services">
+                                <div class="nav-icon">🔌</div>
+                                <div class="nav-content">
+                                    <div class="nav-title">服务端口</div>
+                                    <div class="nav-desc">网络与服务</div>
+                                </div>
                             </button>
-                            <div class="system-uptime">
-                                <span class="uptime-label">系统运行</span>
-                                <span class="uptime-value" id="system-uptime-days">0 天</span>
-                            </div>
+                            <button class="nav-btn quaternary" data-tab="terminal">
+                                <div class="nav-icon">🖥️</div>
+                                <div class="nav-content">
+                                    <div class="nav-title">Web终端</div>
+                                    <div class="nav-desc">命令行界面</div>
+                                </div>
+                            </button>
                         </div>
                     </div>
                 </div>
