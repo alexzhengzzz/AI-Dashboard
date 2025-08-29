@@ -6,13 +6,36 @@
 
 基于 Flask 的实时服务器监控仪表板，使用 WebSocket 提供系统资源监控、端口状态检查和进程管理功能，包含身份验证和防暴力破解保护。新增内存使用排行TOP 15功能、**Web终端**功能和**DNS服务器**功能，可实时查看和管理高内存占用进程，直接在浏览器中使用完整的Linux终端，并提供带广告屏蔽的DNS解析服务。
 
-## 核心组件
+## 核心组件（重构后架构）
 
-- `app.py` - Flask 主应用，处理路由和 WebSocket
+### 主应用
+- `app.py` - Flask 主应用（已重构，使用新监控服务）
+- `app_refactored.py` - 完全重构的主应用（模块化架构）
+
+### 监控系统（模块化重构）
+- `app/services/monitor_service.py` - 监控服务聚合器，统一数据接口
+- `app/monitors/system_monitor.py` - 系统信息监控（CPU、内存、磁盘、网络）
+- `app/monitors/process_monitor.py` - 进程监控和管理
+- `app/monitors/network_monitor.py` - 网络和端口监控
+- `app/monitors/health_monitor.py` - 系统健康状态评估
+- `app/core/base_monitor.py` - 监控器基类和通用工具
+
+### 路由系统（蓝图架构）
+- `routes/api/system_routes.py` - 系统监控API路由
+- `routes/api/process_routes.py` - 进程管理API路由
+- `routes/dns/dns_routes.py` - DNS服务API路由
+- `app/handlers/websocket_handler.py` - WebSocket事件处理器
+
+### 前端系统（模块化重构）
+- `static/js/core/dashboard-core.js` - 前端核心框架（424行）
+- `static/js/modules/monitoring.js` - 系统监控模块（563行）
+- `static/js/modules/processes.js` - 进程管理模块（627行）
+- `static/js/dashboard-refactored.js` - 主Dashboard类（444行）
+
+### 其他组件
 - `app/auth.py` - 身份验证和安全管理
-- `app/monitor.py` - 使用 psutil 收集系统数据
-- `app/terminal.py` - Web终端会话管理（新增）
-- `app/dns_server.py` - DNS服务器和广告屏蔽（新增）
+- `app/terminal.py` - Web终端会话管理
+- `app/dns_server.py` - DNS服务器和广告屏蔽
 - `app/dns_manager.py` - DNS统计和管理
 - `app/adblock.py` - 广告屏蔽引擎
 - `config/config.py` - 配置管理（包含密码设置）
@@ -227,6 +250,34 @@ dig @服务器IP -p 8053 doubleclick.net
 - HTTP 环境设置 `SESSION_COOKIE_SECURE = False`
 - DNS服务器默认端口8053，避免与系统DNS冲突
 - 查看日志：`sudo journalctl -u dashboard -f`
+
+## 架构重构记录 (v3.0)
+
+### 🔧 重大架构重构 (2025-08-29)
+- **问题**：原有代码存在单体文件过大、耦合度高、可维护性差的问题
+- **解决方案**：进行全面的模块化重构，拆分大文件，分离职责
+- **重构成果**：
+  - **后端重构**：`monitor.py`(998行) → 5个专门模块(150-250行/文件)
+  - **前端重构**：`dashboard.js`(3266行) → 4个模块化组件(420-630行/文件) 
+  - **路由分离**：API路由分离为独立蓝图，WebSocket事件处理器模块化
+  - **服务聚合**：创建统一的监控服务接口，支持增量更新和缓存
+  - **向后兼容**：保持所有原有API接口不变，无破坏性更新
+
+### 🏗️ 新架构优势
+- **模块化设计**：清晰的职责分离，独立的功能模块
+- **低耦合高内聚**：各模块间依赖最小化，内部功能高度集中
+- **可扩展性强**：新功能易于添加，不影响现有模块
+- **维护性好**：问题定位快速，代码修改影响范围可控
+- **性能优化**：支持按需加载、增量更新、数据缓存
+
+### 📊 重构效果对比
+| 指标 | 重构前 | 重构后 | 改善 |
+|------|--------|---------|------|
+| 最大文件行数 | 3266行 | 630行 | 减少80% |
+| 文件职责 | 单一文件混合多功能 | 每个文件单一职责 | 清晰分离 |
+| 代码复用 | 重复代码较多 | 基类和工具函数复用 | 显著提升 |
+| 扩展难度 | 修改影响全局 | 模块化扩展 | 大幅降低 |
+| 测试覆盖 | 难以单元测试 | 可独立测试模块 | 便于测试 |
 
 ## 技术升级记录
 

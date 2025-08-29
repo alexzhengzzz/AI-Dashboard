@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config.config import Config
 from app.auth import auth_manager
-from app.monitor import monitor
+from app.services.monitor_service import monitor
 from app.terminal import terminal_manager
 from app.dns_server import dns_server
 from app.dns_manager import dns_manager
