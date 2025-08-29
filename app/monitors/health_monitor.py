@@ -111,7 +111,8 @@ class HealthMonitor(BaseMonitor):
         """获取CPU基础信息"""
         try:
             import os
-            cpu_percent = psutil.cpu_percent(interval=1)
+            # 使用更短的间隔减少阻塞时间
+            cpu_percent = psutil.cpu_percent(interval=0.1)
             load_avg = getattr(os, 'getloadavg', lambda: [0, 0, 0])()
             
             return {

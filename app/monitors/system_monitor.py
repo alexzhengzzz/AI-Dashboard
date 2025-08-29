@@ -30,8 +30,9 @@ class SystemInfoMonitor(BaseMonitor):
     
     def get_cpu_info(self) -> Dict[str, Any]:
         """获取CPU信息"""
-        cpu_percent_total = psutil.cpu_percent(interval=1)
-        cpu_percent_per_cpu = psutil.cpu_percent(interval=0.1, percpu=True)
+        # 使用更短的间隔减少阻塞时间，或使用非阻塞方式
+        cpu_percent_total = psutil.cpu_percent(interval=0.1)
+        cpu_percent_per_cpu = psutil.cpu_percent(interval=0, percpu=True)
         load_avg = getattr(psutil, 'getloadavg', lambda: [0, 0, 0])()
         
         return {
