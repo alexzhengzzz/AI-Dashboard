@@ -12,6 +12,73 @@ class SystemMonitor:
     def __init__(self):
         self.boot_time = datetime.fromtimestamp(psutil.boot_time())
         
+    def is_protected_process(self, proc_name, pid, username):
+        """判断进程是否受保护"""
+        protected_processes = [
+            'systemd', 'init', 'kernel', 'kthreadd', 'ssh', 'sshd',
+            'NetworkManager', 'dbus', 'cron', 'rsyslog', 'udev',
+            'irq/', 'rcu_', 'migration/', 'ksoftirqd', 'watchdog',
+            'systemd-', 'kworker', 'ksoftirqd', 'migration', 'rcu_gp',
+            'rcu_par_gp', 'netns', 'kcompactd', 'khugepaged'
+        ]
+        
+        # 基于进程名判断
+        proc_name_lower = proc_name.lower()
+        if any(protected in proc_name_lower for protected in protected_processes):
+            return True
+            
+        # 基于PID和用户判断（系统进程保护）
+        if username == 'root' and pid < 1000:
+            return True
+            
+        return False
+    
+    def get_process_category(self, proc_name, username, cmdline):
+        """获取进程分类"""
+        proc_name_lower = proc_name.lower()
+        cmdline_lower = (cmdline or '').lower()
+        
+        # 系统内核进程
+        if any(kernel_proc in proc_name_lower for kernel_proc in 
+               ['kernel', 'kthreadd', 'kworker', 'ksoftirqd', 'migration', 'rcu_', 'irq/']):
+            return 'kernel'
+            
+        # 系统服务
+        if any(service in proc_name_lower for service in 
+               ['systemd', 'dbus', 'NetworkManager', 'cron', 'rsyslog', 'udev', 'ssh', 'sshd']):
+            return 'system_service'
+            
+        # Web服务器
+        if any(web in proc_name_lower for web in 
+               ['nginx', 'apache', 'httpd', 'lighttpd', 'caddy']):
+            return 'web_server'
+            
+        # 数据库
+        if any(db in proc_name_lower for db in 
+               ['mysql', 'postgres', 'redis', 'mongodb', 'sqlite']):
+            return 'database'
+            
+        # 开发工具
+        if any(dev in proc_name_lower for dev in 
+               ['python', 'node', 'java', 'php', 'ruby', 'go', 'rust', 'gcc', 'clang']):
+            return 'development'
+            
+        # 桌面环境
+        if any(desktop in proc_name_lower for desktop in 
+               ['gnome', 'kde', 'xfce', 'unity', 'cinnamon', 'mate']):
+            return 'desktop'
+            
+        # 浏览器
+        if any(browser in proc_name_lower for browser in 
+               ['firefox', 'chrome', 'chromium', 'opera', 'edge', 'safari']):
+            return 'browser'
+            
+        # 用户应用
+        if username != 'root':
+            return 'user_app'
+            
+        return 'other'
+        
     def get_cpu_info(self):
         # 只调用一次 psutil.cpu_percent 来获取总体和每个CPU的使用率
         cpu_percent_total = psutil.cpu_percent(interval=1)
@@ -182,52 +249,265 @@ class SystemMonitor:
     
     def get_process_info(self):
         processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
+        # 首先调用 cpu_percent() 来初始化CPU统计
+        for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
             try:
-                process_info = proc.info.copy()
-                # Add memory usage in MB
-                try:
-                    proc_obj = psutil.Process(proc.info['pid'])
-                    memory_info = proc_obj.memory_info()
-                    process_info['memory_rss_mb'] = round(memory_info.rss / 1024 / 1024, 1)
-                    process_info['memory_vms_mb'] = round(memory_info.vms / 1024 / 1024, 1)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    process_info['memory_rss_mb'] = 0
-                    process_info['memory_vms_mb'] = 0
-                processes.append(process_info)
+                proc.cpu_percent(interval=None)  # 非阻塞调用，初始化CPU统计
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         
-        # Sort by CPU usage
-        processes.sort(key=lambda x: x['cpu_percent'] or 0, reverse=True)
-        return processes[:10]  # Top 10 processes
-
-    def get_memory_top_processes(self):
-        """获取内存占用最多的进程"""
-        processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
+        # 等待一小段时间让CPU统计稳定
+        import time
+        time.sleep(0.1)
+        
+        for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
             try:
-                process_info = proc.info.copy()
-                # Add memory usage in MB
+                process_info = {}
+                proc_obj = psutil.Process(proc.info['pid'])
+                
+                # 基础信息
+                process_info['pid'] = proc.info['pid']
+                process_info['name'] = proc.info['name']
+                process_info['memory_percent'] = proc.info.get('memory_percent', 0)
+                
+                # 获取CPU使用率 (非阻塞)
                 try:
-                    proc_obj = psutil.Process(proc.info['pid'])
+                    process_info['cpu_percent'] = round(proc_obj.cpu_percent(interval=None), 1)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    process_info['cpu_percent'] = 0
+                
+                # 获取详细进程状态
+                try:
+                    status = proc_obj.status()
+                    # 将状态转换为更友好的显示
+                    status_map = {
+                        'running': '运行中',
+                        'sleeping': '睡眠',
+                        'disk-sleep': '磁盘等待',
+                        'stopped': '已停止',
+                        'tracing-stop': '跟踪停止',
+                        'zombie': '僵尸进程',
+                        'dead': '已终止',
+                        'wake-kill': '唤醒终止',
+                        'waking': '唤醒中',
+                        'idle': '空闲',
+                        'locked': '锁定',
+                        'waiting': '等待'
+                    }
+                    process_info['status'] = status
+                    process_info['status_display'] = status_map.get(status, status)
+                    
+                    # 对于睡眠状态的进程，获取更详细信息
+                    if status == 'sleeping':
+                        # 检查是否有网络连接或文件操作
+                        try:
+                            connections = proc_obj.connections()
+                            if connections:
+                                process_info['status_display'] = '网络等待'
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                            
+                        try:
+                            open_files = proc_obj.open_files()
+                            if open_files:
+                                process_info['status_display'] = 'I/O等待'
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    process_info['status'] = 'unknown'
+                    process_info['status_display'] = '未知'
+                
+                # 添加内存使用量
+                try:
                     memory_info = proc_obj.memory_info()
                     process_info['memory_rss_mb'] = round(memory_info.rss / 1024 / 1024, 1)
                     process_info['memory_vms_mb'] = round(memory_info.vms / 1024 / 1024, 1)
+                    
+                    # 获取用户名
                     process_info['username'] = proc_obj.username()
-                    process_info['cmdline'] = ' '.join(proc_obj.cmdline()[:3])  # First 3 args
+                    
+                    # 获取创建时间，用于判断进程活跃度
+                    create_time = proc_obj.create_time()
+                    process_info['create_time'] = create_time
+                    
+                    # 计算进程运行时间
+                    running_time = time.time() - create_time
+                    if running_time < 60:
+                        process_info['running_time'] = f'{int(running_time)}秒'
+                    elif running_time < 3600:
+                        process_info['running_time'] = f'{int(running_time/60)}分钟'
+                    else:
+                        process_info['running_time'] = f'{int(running_time/3600)}小时'
+                        
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    process_info['memory_rss_mb'] = 0
+                    process_info['memory_vms_mb'] = 0
+                    process_info['username'] = 'unknown'
+                    process_info['running_time'] = '未知'
+                
+                processes.append(process_info)
+                
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # 按CPU使用率排序，但考虑活跃进程优先
+        def sort_key(proc):
+            cpu = proc.get('cpu_percent', 0)
+            # 对于running状态的进程给予额外权重
+            if proc.get('status') == 'running':
+                cpu += 1000  # 给运行中的进程额外权重
+            elif proc.get('cpu_percent', 0) > 0.1:  # CPU使用率超过0.1%的睡眠进程也优先显示
+                cpu += 100
+            return cpu
+            
+        processes.sort(key=sort_key, reverse=True)
+        return processes[:10]  # Top 10 processes
+
+    def get_memory_top_processes(self, min_memory_mb=10, limit=15):
+        """获取内存占用最多的进程
+        
+        Args:
+            min_memory_mb: 最小内存使用量阈值(MB)
+            limit: 返回进程数量限制
+        """
+        processes = []
+        import time
+        
+        for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
+            try:
+                process_info = {}
+                proc_obj = psutil.Process(proc.info['pid'])
+                
+                # 基础信息
+                process_info['pid'] = proc.info['pid']
+                process_info['name'] = proc.info['name']
+                process_info['memory_percent'] = proc.info.get('memory_percent', 0)
+                
+                # 获取CPU使用率 (非阻塞)
+                try:
+                    process_info['cpu_percent'] = round(proc_obj.cpu_percent(interval=None), 1)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    process_info['cpu_percent'] = 0
+                
+                # 获取详细进程状态
+                try:
+                    status = proc_obj.status()
+                    # 将状态转换为更友好的显示
+                    status_map = {
+                        'running': '运行中',
+                        'sleeping': '睡眠',
+                        'disk-sleep': '磁盘等待',
+                        'stopped': '已停止',
+                        'tracing-stop': '跟踪停止',
+                        'zombie': '僵尸进程',
+                        'dead': '已终止',
+                        'wake-kill': '唤醒终止',
+                        'waking': '唤醒中',
+                        'idle': '空闲',
+                        'locked': '锁定',
+                        'waiting': '等待'
+                    }
+                    process_info['status'] = status
+                    process_info['status_display'] = status_map.get(status, status)
+                    
+                    # 对于睡眠状态的进程，获取更详细信息
+                    if status == 'sleeping':
+                        try:
+                            # 检查是否有网络连接
+                            connections = proc_obj.connections()
+                            if connections:
+                                process_info['status_display'] = '网络等待'
+                                process_info['connection_info'] = f'{len(connections)}个连接'
+                            else:
+                                # 检查是否有文件操作
+                                open_files = proc_obj.open_files()
+                                if open_files:
+                                    process_info['status_display'] = 'I/O等待'
+                                else:
+                                    # 检查进程是否最近有CPU活动
+                                    if process_info['cpu_percent'] > 0:
+                                        process_info['status_display'] = '活跃睡眠'
+                                    else:
+                                        process_info['status_display'] = '空闲睡眠'
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                            
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    process_info['status'] = 'unknown'
+                    process_info['status_display'] = '未知'
+                
+                # 添加内存使用量
+                try:
+                    memory_info = proc_obj.memory_info()
+                    process_info['memory_rss_mb'] = round(memory_info.rss / 1024 / 1024, 1)
+                    process_info['memory_vms_mb'] = round(memory_info.vms / 1024 / 1024, 1)
+                    
+                    # 应用内存过滤阈值
+                    if process_info['memory_rss_mb'] < min_memory_mb:
+                        continue
+                    
+                    # 获取用户名
+                    process_info['username'] = proc_obj.username()
+                    
+                    # 添加保护状态
+                    process_info['is_protected'] = self.is_protected_process(
+                        process_info['name'], 
+                        process_info['pid'], 
+                        process_info['username']
+                    )
+                    
+                    # 获取进程分类
+                    process_info['category'] = self.get_process_category(
+                        process_info['name'],
+                        process_info['username'],
+                        process_info.get('cmdline', '')
+                    )
+                    
+                    # 获取命令行参数（截取前3个参数）
+                    try:
+                        cmdline = proc_obj.cmdline()
+                        if cmdline:
+                            # 只显示前3个参数，并限制总长度
+                            cmd_parts = cmdline[:3]
+                            cmd_str = ' '.join(cmd_parts)
+                            if len(cmd_str) > 50:
+                                cmd_str = cmd_str[:47] + '...'
+                            process_info['cmdline'] = cmd_str
+                        else:
+                            process_info['cmdline'] = f'[{process_info["name"]}]'
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        process_info['cmdline'] = 'unknown'
+                        
+                    # 获取创建时间
+                    create_time = proc_obj.create_time()
+                    process_info['create_time'] = create_time
+                    
+                    # 计算进程运行时间
+                    running_time = time.time() - create_time
+                    if running_time < 60:
+                        process_info['running_time'] = f'{int(running_time)}秒'
+                    elif running_time < 3600:
+                        process_info['running_time'] = f'{int(running_time/60)}分钟'
+                    elif running_time < 86400:
+                        process_info['running_time'] = f'{int(running_time/3600)}小时'
+                    else:
+                        process_info['running_time'] = f'{int(running_time/86400)}天'
+                        
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     process_info['memory_rss_mb'] = 0
                     process_info['memory_vms_mb'] = 0
                     process_info['username'] = 'unknown'
                     process_info['cmdline'] = 'unknown'
+                    process_info['running_time'] = '未知'
+                
                 processes.append(process_info)
+                
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         
         # Sort by memory usage (RSS)
         processes.sort(key=lambda x: x['memory_rss_mb'] or 0, reverse=True)
-        return processes[:15]  # Top 15 processes by memory
+        return processes[:limit]  # Top processes by memory
     
     def get_services_status(self):
         services = []
@@ -368,24 +648,27 @@ class SystemMonitor:
                 }
             
             # 安全检查：不允许关闭系统关键进程
-            protected_processes = ['systemd', 'init', 'kernel', 'kthreadd', 'ssh', 'sshd']
+            protected_processes = [
+                'systemd', 'init', 'kernel', 'kthreadd', 'ssh', 'sshd',
+                'NetworkManager', 'dbus', 'cron', 'rsyslog', 'udev',
+                'irq/', 'rcu_', 'migration/', 'ksoftirqd', 'watchdog',
+                'systemd-', 'kworker', 'ksoftirqd', 'migration', 'rcu_gp',
+                'rcu_par_gp', 'netns', 'kcompactd', 'khugepaged'
+            ]
             killed_processes = []
             
             for proc_info in target_processes:
                 proc_name = proc_info['name'].lower()
                 
-                # 检查是否为受保护的进程
-                if any(protected in proc_name for protected in protected_processes):
-                    continue
-                
-                # 检查进程是否以 root 权限运行（额外安全检查）
+                # 使用统一的保护检查函数
                 try:
                     proc = proc_info['process']
-                    if proc.username() == 'root' and proc_info['pid'] < 1000:
-                        # 跳过系统进程
+                    username = proc.username()
+                    if self.is_protected_process(proc_name, proc_info['pid'], username):
                         continue
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
-                    pass
+                    # 如果无法获取用户信息，默认保护
+                    continue
                 
                 try:
                     # 尝试优雅地终止进程 (SIGTERM)
@@ -441,19 +724,11 @@ class SystemMonitor:
                     'message': f'进程 PID {pid} 不存在或无法访问'
                 }
             
-            # 安全检查：不允许关闭系统关键进程
-            protected_processes = ['systemd', 'init', 'kernel', 'kthreadd', 'ssh', 'sshd']
-            if any(protected in proc_name.lower() for protected in protected_processes):
+            # 使用统一的保护检查函数
+            if self.is_protected_process(proc_name, pid, proc_username):
                 return {
                     'success': False,
-                    'message': f'进程 {proc_name} 受保护，无法终止'
-                }
-            
-            # 检查进程是否以 root 权限运行（额外安全检查）
-            if proc_username == 'root' and pid < 1000:
-                return {
-                    'success': False,
-                    'message': f'系统进程 {proc_name} (PID: {pid}) 受保护，无法终止'
+                    'message': f'进程 {proc_name} (PID: {pid}) 受保护，无法终止'
                 }
             
             try:
@@ -564,36 +839,66 @@ class SystemMonitor:
             total_processes = len(psutil.pids())
             running_processes = 0
             sleeping_processes = 0
+            active_processes = 0  # 有CPU活动的进程
+            zombie_processes = 0
+            other_processes = 0
             
-            for pid in psutil.pids():
+            # 使用更高效的方式统计进程状态
+            for proc in psutil.process_iter(['pid', 'status']):
                 try:
-                    proc = psutil.Process(pid)
-                    status = proc.status()
+                    status = proc.info['status']
+                    
                     if status == 'running':
                         running_processes += 1
                     elif status == 'sleeping':
                         sleeping_processes += 1
+                        # 检查睡眠进程是否有CPU活动
+                        try:
+                            proc_obj = psutil.Process(proc.info['pid'])
+                            cpu_percent = proc_obj.cpu_percent(interval=None)
+                            if cpu_percent > 0.1:  # CPU使用率超过0.1%认为是活跃进程
+                                active_processes += 1
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                    elif status == 'zombie':
+                        zombie_processes += 1
+                    else:
+                        other_processes += 1
+                        
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
             
             # 网络连接统计
-            connections = psutil.net_connections()
-            established_connections = len([c for c in connections if c.status == 'ESTABLISHED'])
-            listening_connections = len([c for c in connections if c.status == 'LISTEN'])
+            try:
+                connections = psutil.net_connections()
+                established_connections = len([c for c in connections if c.status == 'ESTABLISHED'])
+                listening_connections = len([c for c in connections if c.status == 'LISTEN'])
+                time_wait_connections = len([c for c in connections if c.status == 'TIME_WAIT'])
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                established_connections = 0
+                listening_connections = 0
+                time_wait_connections = 0
             
             # 用户统计
-            users = psutil.users()
-            active_users = len(set(user.name for user in users))
+            try:
+                users = psutil.users()
+                active_users = len(set(user.name for user in users))
+            except:
+                active_users = 0
             
             return {
                 'processes': {
                     'total': total_processes,
                     'running': running_processes,
-                    'sleeping': sleeping_processes
+                    'sleeping': sleeping_processes,
+                    'active_sleeping': active_processes,  # 活跃的睡眠进程
+                    'zombie': zombie_processes,
+                    'other': other_processes
                 },
                 'connections': {
                     'established': established_connections,
-                    'listening': listening_connections
+                    'listening': listening_connections,
+                    'time_wait': time_wait_connections
                 },
                 'users': {
                     'active': active_users
@@ -601,8 +906,8 @@ class SystemMonitor:
             }
         except Exception as e:
             return {
-                'processes': {'total': 0, 'running': 0, 'sleeping': 0},
-                'connections': {'established': 0, 'listening': 0},
+                'processes': {'total': 0, 'running': 0, 'sleeping': 0, 'active_sleeping': 0, 'zombie': 0, 'other': 0},
+                'connections': {'established': 0, 'listening': 0, 'time_wait': 0},
                 'users': {'active': 0}
             }
     

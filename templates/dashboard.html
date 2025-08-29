@@ -17,7 +17,7 @@
     <header class="header">
         <h1>服务器监控仪表板</h1>
         <div class="header-controls">
-            <span id="last-update">连接中...</span>
+            <span id="last-update">正在加载...</span>
             <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
         </div>
     </header>
@@ -29,6 +29,7 @@
             <button class="tab-btn" data-tab="resources">资源监控</button>
             <button class="tab-btn" data-tab="processes">进程管理</button>
             <button class="tab-btn" data-tab="services">服务端口</button>
+            <button class="tab-btn" data-tab="dns">🛡️ DNS服务器</button>
             <button class="tab-btn" data-tab="terminal">🖥️ 终端</button>
         </nav>
 
@@ -364,6 +365,7 @@
                                         <th class="sortable" data-sort="cpu">CPU% <span class="sort-arrow">↕</span></th>
                                         <th class="sortable" data-sort="memory">内存% <span class="sort-arrow">↕</span></th>
                                         <th>状态</th>
+                                        <th>操作</th>
                                     </tr>
                                 </thead>
                                 <tbody id="processes-tbody">
@@ -384,6 +386,26 @@
                             </button>
                         </div>
                     </div>
+                    <div class="card-filters">
+                        <div class="filter-group">
+                            <label>分类筛选：</label>
+                            <button class="filter-btn active" data-filter="all">全部</button>
+                            <button class="filter-btn" data-filter="user_app">用户应用</button>
+                            <button class="filter-btn" data-filter="system_service">系统服务</button>
+                            <button class="filter-btn" data-filter="development">开发工具</button>
+                            <button class="filter-btn" data-filter="web_server">Web服务器</button>
+                            <button class="filter-btn" data-filter="database">数据库</button>
+                        </div>
+                        <div class="filter-group">
+                            <label>内存阈值：</label>
+                            <input type="range" id="memory-threshold" min="10" max="500" value="10" step="10">
+                            <span id="memory-threshold-value">10 MB</span>
+                        </div>
+                        <div class="filter-group">
+                            <label>显示受保护进程：</label>
+                            <input type="checkbox" id="show-protected" checked>
+                        </div>
+                    </div>
                     <div id="memory-processes-table" class="card-body">
                         <div class="table-wrapper">
                             <table class="process-table sortable">
@@ -392,8 +414,11 @@
                                         <th class="sortable" data-sort="pid">PID <span class="sort-arrow">↕</span></th>
                                         <th class="sortable" data-sort="name">进程名 <span class="sort-arrow">↕</span></th>
                                         <th class="sortable" data-sort="user">用户 <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="category">分类 <span class="sort-arrow">↕</span></th>
                                         <th class="sortable" data-sort="memory-mb">内存(MB) <span class="sort-arrow">↕</span></th>
                                         <th class="sortable" data-sort="memory-percent">内存% <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="cpu">CPU% <span class="sort-arrow">↕</span></th>
+                                        <th class="sortable" data-sort="status">状态 <span class="sort-arrow">↕</span></th>
                                         <th class="command-col">命令</th>
                                         <th class="action-col">操作</th>
                                     </tr>
@@ -445,6 +470,191 @@
             </div>
         </div>
 
+        <!-- DNS服务器标签页 -->
+        <div id="dns-tab" class="tab-content">
+            <!-- DNS服务器控制面板 -->
+            <div class="overview-row">
+                <div class="card dns-status-card">
+                    <div class="card-header">
+                        <h3>DNS服务器状态</h3>
+                        <div class="dns-controls">
+                            <button id="dns-start-btn" class="btn btn-success">启动</button>
+                            <button id="dns-stop-btn" class="btn btn-danger">停止</button>
+                            <button id="dns-restart-btn" class="btn btn-warning">重启</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="dns-status-grid">
+                            <div class="status-item">
+                                <div class="status-icon" id="dns-server-status">🔴</div>
+                                <div class="status-content">
+                                    <label>服务状态</label>
+                                    <span id="dns-server-status-text">未运行</span>
+                                </div>
+                            </div>
+                            <div class="status-item">
+                                <div class="status-icon">🌐</div>
+                                <div class="status-content">
+                                    <label>监听地址</label>
+                                    <span id="dns-listen-address">0.0.0.0:53</span>
+                                </div>
+                            </div>
+                            <div class="status-item">
+                                <div class="status-icon">⏱️</div>
+                                <div class="status-content">
+                                    <label>运行时间</label>
+                                    <span id="dns-uptime">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dns-stats-card">
+                    <div class="card-header">
+                        <h3>查询统计 (24小时)</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="dns-stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value" id="total-queries">0</div>
+                                <div class="stat-label">总查询数</div>
+                            </div>
+                            <div class="stat-item blocked">
+                                <div class="stat-value" id="blocked-queries">0</div>
+                                <div class="stat-label">屏蔽查询</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="allowed-queries">0</div>
+                                <div class="stat-label">允许查询</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="block-rate">0%</div>
+                                <div class="stat-label">屏蔽率</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 广告屏蔽统计 -->
+            <div class="overview-row">
+                <div class="card adblock-stats-card">
+                    <div class="card-header">
+                        <h3>广告屏蔽统计</h3>
+                        <div class="adblock-controls">
+                            <button id="update-blocklist-btn" class="btn btn-primary">更新屏蔽列表</button>
+                            <button id="clear-cache-btn" class="btn btn-secondary">清空缓存</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="adblock-stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value" id="blocked-domains-count">0</div>
+                                <div class="stat-label">屏蔽域名数</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="cache-hit-rate">0%</div>
+                                <div class="stat-label">缓存命中率</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="last-update">-</div>
+                                <div class="stat-label">最后更新</div>
+                            </div>
+                        </div>
+                        <div class="blocklist-sources">
+                            <h4>屏蔽列表源</h4>
+                            <div id="blocklist-sources-list" class="sources-list">
+                                <!-- 动态生成屏蔽列表源状态 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dns-chart-card">
+                    <div class="card-header">
+                        <h3>DNS查询趋势</h3>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="dns-query-chart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DNS查询记录和管理 -->
+            <div class="overview-row">
+                <div class="card dns-queries-card">
+                    <div class="card-header">
+                        <h3>最近DNS查询</h3>
+                        <div class="query-controls">
+                            <select id="query-filter">
+                                <option value="all">所有查询</option>
+                                <option value="allowed">允许的查询</option>
+                                <option value="blocked">被屏蔽的查询</option>
+                            </select>
+                            <button id="refresh-queries-btn" class="btn btn-secondary">刷新</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="dns-queries-container">
+                            <table id="dns-queries-table" class="dns-table">
+                                <thead>
+                                    <tr>
+                                        <th>时间</th>
+                                        <th>客户端IP</th>
+                                        <th>域名</th>
+                                        <th>类型</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dns-queries-tbody">
+                                    <!-- 动态生成查询记录 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card dns-management-card">
+                    <div class="card-header">
+                        <h3>DNS管理</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="dns-management-tabs">
+                            <button class="management-tab-btn active" data-target="whitelist-tab">白名单</button>
+                            <button class="management-tab-btn" data-target="clients-tab">客户端统计</button>
+                            <button class="management-tab-btn" data-target="top-domains-tab">热门域名</button>
+                        </div>
+
+                        <!-- 白名单管理 -->
+                        <div id="whitelist-tab" class="management-tab-content active">
+                            <div class="whitelist-controls">
+                                <input type="text" id="whitelist-domain-input" placeholder="输入要添加的域名">
+                                <button id="add-whitelist-btn" class="btn btn-primary">添加到白名单</button>
+                            </div>
+                            <div id="whitelist-list" class="whitelist-list">
+                                <!-- 动态生成白名单项目 -->
+                            </div>
+                        </div>
+
+                        <!-- 客户端统计 -->
+                        <div id="clients-tab" class="management-tab-content">
+                            <div id="clients-stats-list" class="clients-list">
+                                <!-- 动态生成客户端统计 -->
+                            </div>
+                        </div>
+
+                        <!-- 热门域名 -->
+                        <div id="top-domains-tab" class="management-tab-content">
+                            <div id="top-domains-list" class="domains-list">
+                                <!-- 动态生成热门域名 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 终端标签页 -->
         <div id="terminal-tab" class="tab-content">
             <div class="terminal-container">
@@ -452,8 +662,27 @@
                     <div class="card-header">
                         <h3>Web 终端</h3>
                         <div class="terminal-controls">
-                            <button id="new-terminal-btn" class="btn btn-primary">新建终端</button>
-                            <button id="clear-terminal-btn" class="btn btn-secondary">清屏</button>
+                            <div class="terminal-main-controls">
+                                <button id="new-terminal-btn" class="btn btn-primary">新建终端</button>
+                                <button id="clear-terminal-btn" class="btn btn-secondary">清屏</button>
+                            </div>
+                            <div class="terminal-settings">
+                                <div class="setting-group">
+                                    <label for="font-size-control">字体:</label>
+                                    <button id="font-decrease" class="btn btn-small">A-</button>
+                                    <span id="font-size-display">16</span>
+                                    <button id="font-increase" class="btn btn-small">A+</button>
+                                </div>
+                                <div class="setting-group">
+                                    <label for="theme-selector">主题:</label>
+                                    <select id="theme-selector" class="theme-select">
+                                        <option value="dark">深色</option>
+                                        <option value="light">浅色</option>
+                                        <option value="green">绿色</option>
+                                        <option value="blue">蓝色</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div class="terminal-tabs" id="terminal-tabs">
                                 <!-- 动态生成终端标签页 -->
                             </div>
