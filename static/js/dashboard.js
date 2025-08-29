@@ -2963,11 +2963,8 @@ class Dashboard {
         }
     }
     
-    formatUptime(uptime) {
-        if (!uptime) return '-';
-        
-        const now = Date.now() / 1000;
-        const uptimeSeconds = Math.floor(now - uptime);
+    formatUptime(uptimeSeconds) {
+        if (!uptimeSeconds || uptimeSeconds < 0) return '0秒';
         
         if (uptimeSeconds < 60) return `${uptimeSeconds}秒`;
         if (uptimeSeconds < 3600) return `${Math.floor(uptimeSeconds / 60)}分钟`;

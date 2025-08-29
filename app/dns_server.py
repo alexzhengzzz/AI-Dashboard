@@ -197,6 +197,7 @@ class AsyncDNSServer:
         self.server = None
         self.server_thread = None
         self.running = False
+        self.start_time = None
         
     def start(self):
         """
@@ -219,6 +220,7 @@ class AsyncDNSServer:
             
             self.running = True
             self.resolver.running = True
+            self.start_time = time.time()
             
             dns_manager.log_server_event('DNS服务器启动', f'{self.host}:{self.port}')
             return True, f"DNS服务器已启动在 {self.host}:{self.port}"
@@ -239,6 +241,7 @@ class AsyncDNSServer:
                 self.server.server_close()
             self.running = False
             self.resolver.running = False
+            self.start_time = None
             
             dns_manager.log_server_event('DNS服务器停止', f'{self.host}:{self.port}')
             return True, "DNS服务器已停止"
@@ -267,12 +270,16 @@ class AsyncDNSServer:
         """
         获取DNS服务器状态
         """
+        uptime = 0
+        if self.running and self.start_time:
+            uptime = max(0, int(time.time() - self.start_time))
+            
         return {
             'running': self.running,
             'host': self.host,
             'port': self.port,
             'stats': self.resolver.get_stats(),
-            'uptime': time.time() if self.running else 0
+            'uptime': uptime
         }
     
     def restart(self):
