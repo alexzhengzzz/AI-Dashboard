@@ -24,6 +24,14 @@ class Dashboard {
         this.dataLoadTimeout = null;
         this.loadingElements = new Set();
         
+        // 数据缓存和增量更新
+        this.cachedData = {};
+        this.lastUpdateTime = 0;
+        this.updateInterval = 5000; // 5秒更新间隔
+        
+        // DOM元素缓存
+        this.domCache = new Map();
+        
         // 显示初始加载指示器
         this.showInitialLoading();
         
@@ -66,8 +74,15 @@ class Dashboard {
                 this.hideDataLoading();
                 this.isInitialLoad = false;
             }
-            this.lastStatsData = data;
-            this.updateDashboard(data);
+            
+            // 处理增量数据或完整数据
+            if (data.incremental) {
+                this.handleIncrementalUpdate(data);
+            } else {
+                this.cachedData = data;
+                this.lastStatsData = data;
+                this.updateDashboard(data);
+            }
         });
 
         this.socket.on('connect_error', (error) => {
@@ -185,32 +200,97 @@ class Dashboard {
         });
     }
 
+    // DOM缓存和增量更新方法
+    getCachedElement(selector) {
+        if (!this.domCache.has(selector)) {
+            const element = document.querySelector(selector);
+            if (element) {
+                this.domCache.set(selector, element);
+            }
+        }
+        return this.domCache.get(selector);
+    }
+
+    handleIncrementalUpdate(incrementalData) {
+        // 合并增量数据到缓存
+        Object.assign(this.cachedData, incrementalData);
+        this.cachedData.timestamp = incrementalData.timestamp;
+        
+        // 只更新有变化的部分
+        if (incrementalData.cpu) {
+            this.updateCpuMetrics(incrementalData.cpu);
+        }
+        if (incrementalData.memory) {
+            this.updateMemoryMetrics(incrementalData.memory);
+        }
+        if (incrementalData.disk) {
+            this.updateDiskMetrics(incrementalData.disk);
+        }
+        if (incrementalData.network) {
+            this.updateNetworkMetrics(incrementalData.network);
+        }
+        if (incrementalData.health) {
+            this.updateSystemHealth(incrementalData.health);
+        }
+        if (incrementalData.stats_summary) {
+            this.updateStatsummary(incrementalData.stats_summary);
+        }
+        if (incrementalData.memory_processes) {
+            this.updateMemoryProcessList(incrementalData.memory_processes);
+        }
+        if (incrementalData.ports) {
+            this.updatePortsStatus(incrementalData.ports);
+        }
+        if (incrementalData.services) {
+            this.updateServicesStatus(incrementalData.services);
+        }
+        
+        // 更新概览指标
+        this.updateOverviewMetrics(this.cachedData);
+        this.updateStatus(`最后更新: ${new Date().toLocaleTimeString()}`);
+    }
+
     startDataRefresh() {
-        // 初始间隔较短，然后逐渐放缓
-        let refreshInterval = 3000; // 初始3秒
+        // 优化的刷新策略：减少不必要的请求
         let refreshCount = 0;
+        let currentInterval = this.updateInterval;
         
         const refreshData = () => {
-            if (this.socket.connected) {
-                this.socket.emit('request_stats');
+            const now = Date.now();
+            
+            // 如果页面不可见，降低更新频率
+            if (document.hidden) {
+                currentInterval = this.updateInterval * 3; // 15秒
+            } else {
+                currentInterval = this.updateInterval; // 5秒
             }
             
-            refreshCount++;
-            // 前5次请求间隔1秒，然后放缓到5秒
-            if (refreshCount <= 5) {
-                setTimeout(refreshData, 1000);
-            } else {
-                // 之后每5秒请求一次
-                setInterval(() => {
-                    if (this.socket.connected) {
-                        this.socket.emit('request_stats');
-                    }
-                }, 5000);
+            if (this.socket.connected && (now - this.lastUpdateTime) >= currentInterval - 500) {
+                this.socket.emit('request_stats');
+                this.lastUpdateTime = now;
             }
         };
         
-        // 等待WebSocket连接后开始定时刷新
-        setTimeout(refreshData, refreshInterval);
+        // 初始立即请求一次数据
+        if (this.socket.connected) {
+            this.socket.emit('request_stats');
+        }
+        
+        // 设置定时器
+        this.refreshTimer = setInterval(refreshData, 1000); // 每秒检查一次
+        
+        // 页面可见性变化时调整更新频率
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.log('页面隐藏，降低更新频率');
+            } else {
+                console.log('页面恢复，恢复正常更新频率');
+                // 页面恢复时立即请求一次数据
+                if (this.socket.connected) {
+                    this.socket.emit('request_stats');
+                }
+            }
+        });
     }
 
     updateDashboard(data) {
@@ -232,41 +312,52 @@ class Dashboard {
     }
 
     updateSystemInfo(system) {
-        document.getElementById('hostname').textContent = system.hostname;
-        document.getElementById('ip-address').textContent = system.ip_address || '获取中...';
+        // 使用缓存的DOM元素
+        const hostnameEl = this.getCachedElement('#hostname');
+        const ipAddressEl = this.getCachedElement('#ip-address');
+        const osDetailedEl = this.getCachedElement('#os-detailed');
+        const uptimeEl = this.getCachedElement('#uptime');
+        const cpuModelEl = this.getCachedElement('#cpu-model');
+        const memoryTotalEl = this.getCachedElement('#memory-total');
+        const systemUptimeDaysEl = this.getCachedElement('#system-uptime-days');
+        
+        if (hostnameEl) hostnameEl.textContent = system.hostname;
+        if (ipAddressEl) ipAddressEl.textContent = system.ip_address || '获取中...';
         
         // 更新详细操作系统信息
-        if (system.os_detailed) {
-            document.getElementById('os-detailed').textContent = 
-                `${system.os_detailed.name} ${system.os_detailed.version}`;
-        } else {
-            document.getElementById('os-detailed').textContent = `${system.os} ${system.os_release}`;
+        if (osDetailedEl) {
+            if (system.os_detailed) {
+                osDetailedEl.textContent = `${system.os_detailed.name} ${system.os_detailed.version}`;
+            } else {
+                osDetailedEl.textContent = `${system.os} ${system.os_release}`;
+            }
         }
         
-        document.getElementById('uptime').textContent = system.uptime_string;
+        if (uptimeEl) uptimeEl.textContent = system.uptime_string;
         
         // 更新CPU型号信息
-        if (system.cpu_detailed) {
-            const cpuInfo = `${system.cpu_detailed.count}核 ${system.cpu_detailed.model || 'Unknown'}`;
-            document.getElementById('cpu-model').textContent = cpuInfo;
-        } else {
-            document.getElementById('cpu-model').textContent = system.processor || 'Unknown';
+        if (cpuModelEl) {
+            if (system.cpu_detailed) {
+                const cpuInfo = `${system.cpu_detailed.count}核 ${system.cpu_detailed.model || 'Unknown'}`;
+                cpuModelEl.textContent = cpuInfo;
+            } else {
+                cpuModelEl.textContent = system.processor || 'Unknown';
+            }
         }
         
         // 更新内存容量信息
-        if (system.memory_detailed) {
-            document.getElementById('memory-total').textContent = `${system.memory_detailed.total_gb}GB`;
-        } else {
-            document.getElementById('memory-total').textContent = '获取中...';
+        if (memoryTotalEl) {
+            if (system.memory_detailed) {
+                memoryTotalEl.textContent = `${system.memory_detailed.total_gb}GB`;
+            } else {
+                memoryTotalEl.textContent = '获取中...';
+            }
         }
         
         // 更新系统运行天数
-        if (system.uptime_seconds) {
+        if (system.uptime_seconds && systemUptimeDaysEl) {
             const days = Math.floor(system.uptime_seconds / 86400);
-            const element = document.getElementById('system-uptime-days');
-            if (element) {
-                element.textContent = `${days} 天`;
-            }
+            systemUptimeDaysEl.textContent = `${days} 天`;
         }
     }
 
@@ -322,10 +413,16 @@ class Dashboard {
         const usedGB = (memory.used / (1024**3)).toFixed(1);
         const totalGB = (memory.total / (1024**3)).toFixed(1);
 
-        document.getElementById('memory-usage').textContent = usagePercent.toFixed(1);
-        document.getElementById('memory-used-gb').textContent = usedGB;
-        document.getElementById('memory-total-gb').textContent = totalGB;
-        document.getElementById('memory-bar').style.width = `${usagePercent}%`;
+        // 使用缓存的DOM元素
+        const memoryUsageEl = this.getCachedElement('#memory-usage');
+        const memoryUsedGbEl = this.getCachedElement('#memory-used-gb');
+        const memoryTotalGbEl = this.getCachedElement('#memory-total-gb');
+        const memoryBarEl = this.getCachedElement('#memory-bar');
+
+        if (memoryUsageEl) memoryUsageEl.textContent = usagePercent.toFixed(1);
+        if (memoryUsedGbEl) memoryUsedGbEl.textContent = usedGB;
+        if (memoryTotalGbEl) memoryTotalGbEl.textContent = totalGB;
+        if (memoryBarEl) memoryBarEl.style.width = `${usagePercent}%`;
         
         // 更新内存状态
         const memoryStatus = document.getElementById('memory-status');

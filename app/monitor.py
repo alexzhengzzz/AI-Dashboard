@@ -11,6 +11,9 @@ import netifaces
 class SystemMonitor:
     def __init__(self):
         self.boot_time = datetime.fromtimestamp(psutil.boot_time())
+        self.last_stats = {}
+        self.static_data_cache = {}
+        self.cache_timestamp = {}
         
     def is_protected_process(self, proc_name, pid, username):
         """判断进程是否受保护"""
@@ -247,132 +250,30 @@ class SystemMonitor:
             'ip_info': ip_info
         }
     
-    def get_process_info(self):
-        processes = []
-        # 首先调用 cpu_percent() 来初始化CPU统计
-        for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
-            try:
-                proc.cpu_percent(interval=None)  # 非阻塞调用，初始化CPU统计
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        
-        # 等待一小段时间让CPU统计稳定
-        import time
-        time.sleep(0.1)
-        
-        for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
-            try:
-                process_info = {}
-                proc_obj = psutil.Process(proc.info['pid'])
-                
-                # 基础信息
-                process_info['pid'] = proc.info['pid']
-                process_info['name'] = proc.info['name']
-                process_info['memory_percent'] = proc.info.get('memory_percent', 0)
-                
-                # 获取CPU使用率 (非阻塞)
-                try:
-                    process_info['cpu_percent'] = round(proc_obj.cpu_percent(interval=None), 1)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    process_info['cpu_percent'] = 0
-                
-                # 获取详细进程状态
-                try:
-                    status = proc_obj.status()
-                    # 将状态转换为更友好的显示
-                    status_map = {
-                        'running': '运行中',
-                        'sleeping': '睡眠',
-                        'disk-sleep': '磁盘等待',
-                        'stopped': '已停止',
-                        'tracing-stop': '跟踪停止',
-                        'zombie': '僵尸进程',
-                        'dead': '已终止',
-                        'wake-kill': '唤醒终止',
-                        'waking': '唤醒中',
-                        'idle': '空闲',
-                        'locked': '锁定',
-                        'waiting': '等待'
-                    }
-                    process_info['status'] = status
-                    process_info['status_display'] = status_map.get(status, status)
-                    
-                    # 对于睡眠状态的进程，获取更详细信息
-                    if status == 'sleeping':
-                        # 检查是否有网络连接或文件操作
-                        try:
-                            connections = proc_obj.connections()
-                            if connections:
-                                process_info['status_display'] = '网络等待'
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-                            
-                        try:
-                            open_files = proc_obj.open_files()
-                            if open_files:
-                                process_info['status_display'] = 'I/O等待'
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    process_info['status'] = 'unknown'
-                    process_info['status_display'] = '未知'
-                
-                # 添加内存使用量
-                try:
-                    memory_info = proc_obj.memory_info()
-                    process_info['memory_rss_mb'] = round(memory_info.rss / 1024 / 1024, 1)
-                    process_info['memory_vms_mb'] = round(memory_info.vms / 1024 / 1024, 1)
-                    
-                    # 获取用户名
-                    process_info['username'] = proc_obj.username()
-                    
-                    # 获取创建时间，用于判断进程活跃度
-                    create_time = proc_obj.create_time()
-                    process_info['create_time'] = create_time
-                    
-                    # 计算进程运行时间
-                    running_time = time.time() - create_time
-                    if running_time < 60:
-                        process_info['running_time'] = f'{int(running_time)}秒'
-                    elif running_time < 3600:
-                        process_info['running_time'] = f'{int(running_time/60)}分钟'
-                    else:
-                        process_info['running_time'] = f'{int(running_time/3600)}小时'
-                        
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    process_info['memory_rss_mb'] = 0
-                    process_info['memory_vms_mb'] = 0
-                    process_info['username'] = 'unknown'
-                    process_info['running_time'] = '未知'
-                
-                processes.append(process_info)
-                
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        
-        # 按CPU使用率排序，但考虑活跃进程优先
-        def sort_key(proc):
-            cpu = proc.get('cpu_percent', 0)
-            # 对于running状态的进程给予额外权重
-            if proc.get('status') == 'running':
-                cpu += 1000  # 给运行中的进程额外权重
-            elif proc.get('cpu_percent', 0) > 0.1:  # CPU使用率超过0.1%的睡眠进程也优先显示
-                cpu += 100
-            return cpu
-            
-        processes.sort(key=sort_key, reverse=True)
-        return processes[:10]  # Top 10 processes
 
-    def get_memory_top_processes(self, min_memory_mb=10, limit=15):
-        """获取内存占用最多的进程
+    def get_memory_top_processes(self, min_memory_mb=10, limit=20):
+        """获取内存占用最多的进程（资源使用排行）
         
         Args:
             min_memory_mb: 最小内存使用量阈值(MB)
-            limit: 返回进程数量限制
+            limit: 返回进程数量限制（默认20）
         """
         processes = []
         import time
         
+        # 首次调用cpu_percent来初始化CPU统计
+        cpu_procs = {}
+        for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
+            try:
+                proc_obj = psutil.Process(proc.info['pid'])
+                proc_obj.cpu_percent(interval=None)  # 初始化CPU统计
+                cpu_procs[proc.info['pid']] = proc_obj
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        
+        # 等待一小段时间让CPU统计数据稳定
+        time.sleep(0.5)
+        
         for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
             try:
                 process_info = {}
@@ -383,11 +284,16 @@ class SystemMonitor:
                 process_info['name'] = proc.info['name']
                 process_info['memory_percent'] = proc.info.get('memory_percent', 0)
                 
-                # 获取CPU使用率 (非阻塞)
+                # 获取CPU使用率 (使用预先初始化的进程对象)
                 try:
-                    process_info['cpu_percent'] = round(proc_obj.cpu_percent(interval=None), 1)
+                    if proc.info['pid'] in cpu_procs:
+                        cpu_percent = cpu_procs[proc.info['pid']].cpu_percent(interval=None)
+                        process_info['cpu_percent'] = round(cpu_percent, 1)
+                    else:
+                        # 如果进程不在预初始化列表中，尝试获取但设为较低优先级
+                        process_info['cpu_percent'] = round(proc_obj.cpu_percent(interval=None), 1)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    process_info['cpu_percent'] = 0
+                    process_info['cpu_percent'] = 0.0
                 
                 # 获取详细进程状态
                 try:
@@ -977,20 +883,114 @@ class SystemMonitor:
         
         return base_info
 
-    def get_all_stats(self):
-        return {
-            'timestamp': datetime.now().isoformat(),
+    def get_all_stats(self, force_full=False):
+        """获取所有统计数据，支持增量更新"""
+        current_time = datetime.now()
+        timestamp = current_time.isoformat()
+        
+        # 构建当前数据
+        current_stats = {
+            'timestamp': timestamp,
             'cpu': self.get_cpu_info(),
             'memory': self.get_memory_info(),
             'disk': self.get_disk_info(),
             'network': self.get_network_info(),
-            'system': self.get_enhanced_system_info(),
+            'system': self.get_cached_system_info(),
             'health': self.get_system_health_info(),
             'stats_summary': self.get_system_stats_summary(),
-            'processes': self.get_process_info(),
             'memory_processes': self.get_memory_top_processes(),
-            'services': self.get_services_status(),
+            'services': self.get_cached_services_status(),
             'ports': self.get_port_info()
         }
+        
+        if force_full or not self.last_stats:
+            self.last_stats = current_stats.copy()
+            return current_stats
+        
+        # 返回增量数据
+        return self.get_incremental_stats(current_stats)
+    
+    def get_cached_system_info(self):
+        """缓存系统信息，降低获取频率"""
+        cache_key = 'system_info'
+        current_time = datetime.now()
+        
+        # 系统信息缓存5分钟
+        if (cache_key in self.static_data_cache and 
+            cache_key in self.cache_timestamp and
+            (current_time - self.cache_timestamp[cache_key]).seconds < 300):
+            return self.static_data_cache[cache_key]
+        
+        system_info = self.get_enhanced_system_info()
+        self.static_data_cache[cache_key] = system_info
+        self.cache_timestamp[cache_key] = current_time
+        return system_info
+    
+    def get_cached_services_status(self):
+        """缓存服务状态，降低检查频率"""
+        cache_key = 'services_status'
+        current_time = datetime.now()
+        
+        # 服务状态缓存30秒
+        if (cache_key in self.static_data_cache and 
+            cache_key in self.cache_timestamp and
+            (current_time - self.cache_timestamp[cache_key]).seconds < 30):
+            return self.static_data_cache[cache_key]
+        
+        services_status = self.get_services_status()
+        self.static_data_cache[cache_key] = services_status
+        self.cache_timestamp[cache_key] = current_time
+        return services_status
+    
+    def get_incremental_stats(self, current_stats):
+        """计算增量统计数据"""
+        incremental = {
+            'timestamp': current_stats['timestamp'],
+            'incremental': True
+        }
+        
+        # 比较并添加有变化的数据
+        for key, current_value in current_stats.items():
+            if key == 'timestamp':
+                continue
+                
+            if key not in self.last_stats:
+                incremental[key] = current_value
+            elif self._has_significant_change(key, self.last_stats[key], current_value):
+                incremental[key] = current_value
+        
+        # 更新最后的数据
+        self.last_stats = current_stats.copy()
+        
+        return incremental if len(incremental) > 2 else {'timestamp': current_stats['timestamp']}
+    
+    def _has_significant_change(self, key, old_value, new_value):
+        """判断数据是否有显著变化"""
+        if key in ['cpu', 'memory', 'health']:
+            # CPU、内存、健康状态：变化阈值1%
+            if isinstance(old_value, dict) and isinstance(new_value, dict):
+                for sub_key in ['usage_percent', 'percent', 'score']:
+                    if sub_key in old_value and sub_key in new_value:
+                        if abs(old_value[sub_key] - new_value[sub_key]) > 1:
+                            return True
+            return False
+        elif key == 'network':
+            # 网络数据：总是更新（变化较频繁）
+            return True
+        elif key == 'disk':
+            # 磁盘数据：变化阈值0.1%
+            if isinstance(old_value, list) and isinstance(new_value, list):
+                for old_disk, new_disk in zip(old_value, new_value):
+                    if abs(old_disk.get('percent', 0) - new_disk.get('percent', 0)) > 0.1:
+                        return True
+            return False
+        elif key in ['memory_processes', 'stats_summary', 'ports']:
+            # 进程、统计摘要、端口：总是更新
+            return True
+        elif key in ['system', 'services']:
+            # 系统信息和服务：很少变化，使用深度比较
+            return old_value != new_value
+        
+        return old_value != new_value
 
 monitor = SystemMonitor()
