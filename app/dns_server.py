@@ -55,19 +55,21 @@ class CustomDNSResolver:
         
         self.query_count += 1
         
-        # 记录DNS查询
-        dns_manager.log_query(
-            client_ip=client_ip,
-            domain=qname,
-            query_type=dns.rdatatype.to_text(qtype),
-            timestamp=datetime.now()
-        )
-        
         try:
             # 检查是否为广告域名
             if adblock_engine.is_blocked(qname):
                 self.blocked_count += 1
                 dns_manager.log_blocked_query(client_ip, qname, datetime.now())
+                
+                # 记录被屏蔽的查询到DNS查询表
+                dns_manager.log_query(
+                    client_ip=client_ip,
+                    domain=qname,
+                    query_type=dns.rdatatype.to_text(qtype),
+                    timestamp=datetime.now(),
+                    response_code='BLOCKED',
+                    cached=False
+                )
                 
                 # 返回空响应（NXDOMAIN 或 0.0.0.0）
                 if qtype == dns.rdatatype.A:
@@ -86,8 +88,25 @@ class CustomDNSResolver:
             if cache_key in self.cache:
                 cached_reply, cache_time = self.cache[cache_key]
                 if time.time() - cache_time < self.cache_ttl:
+                    # 记录缓存命中到统计和数据库
                     dns_manager.record_cache_hit()
-                    return cached_reply
+                    # 重新创建响应消息，确保ID匹配
+                    cached_response = dns.message.make_response(request)
+                    cached_response.answer = cached_reply.answer
+                    cached_response.authority = cached_reply.authority
+                    cached_response.additional = cached_reply.additional
+                    cached_response.set_rcode(cached_reply.rcode())
+                    
+                    # 记录缓存命中的查询到数据库
+                    dns_manager.log_query(
+                        client_ip=client_ip,
+                        domain=qname,
+                        query_type=dns.rdatatype.to_text(qtype),
+                        timestamp=datetime.now(),
+                        cached=True  # 标记为缓存命中
+                    )
+                    
+                    return cached_response
             
             # 执行上游DNS查询
             upstream_reply = self._query_upstream(qname, qtype, request.id)
@@ -95,14 +114,42 @@ class CustomDNSResolver:
                 # 缓存结果
                 self.cache[cache_key] = (upstream_reply, time.time())
                 dns_manager.record_cache_miss()
+                
+                # 记录上游查询成功到数据库
+                dns_manager.log_query(
+                    client_ip=client_ip,
+                    domain=qname,
+                    query_type=dns.rdatatype.to_text(qtype),
+                    timestamp=datetime.now(),
+                    response_code='NOERROR',
+                    cached=False
+                )
+                
                 return upstream_reply
             else:
                 # 查询失败，返回SERVFAIL
+                dns_manager.log_query(
+                    client_ip=client_ip,
+                    domain=qname,
+                    query_type=dns.rdatatype.to_text(qtype),
+                    timestamp=datetime.now(),
+                    response_code='SERVFAIL',
+                    cached=False
+                )
                 response.set_rcode(dns.rcode.SERVFAIL)
                 return response
                 
         except Exception as e:
             print(f"DNS解析错误: {e}")
+            # 记录错误查询到数据库
+            dns_manager.log_query(
+                client_ip=client_ip,
+                domain=qname,
+                query_type=dns.rdatatype.to_text(qtype),
+                timestamp=datetime.now(),
+                response_code='ERROR',
+                cached=False
+            )
             response.set_rcode(dns.rcode.SERVFAIL)
             return response
     
