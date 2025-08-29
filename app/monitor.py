@@ -7,6 +7,7 @@ import os
 import socket
 import signal
 import netifaces
+import time
 
 class SystemMonitor:
     def __init__(self):
@@ -251,6 +252,53 @@ class SystemMonitor:
         }
     
 
+    def _format_running_time(self, start_time):
+        """格式化进程运行时间"""
+        running_time = time.time() - start_time
+        if running_time < 60:
+            return f'{int(running_time)}秒'
+        elif running_time < 3600:
+            return f'{int(running_time/60)}分钟'
+        elif running_time < 86400:
+            return f'{int(running_time/3600)}小时'
+        else:
+            return f'{int(running_time/86400)}天'
+
+    def _get_process_status_display(self, proc_obj, status, cpu_percent):
+        """获取进程状态的友好显示"""
+        status_map = {
+            'running': '运行中',
+            'sleeping': '睡眠',
+            'disk-sleep': '磁盘等待',
+            'stopped': '已停止',
+            'tracing-stop': '跟踪停止',
+            'zombie': '僵尸进程',
+            'dead': '已终止',
+            'wake-kill': '唤醒终止',
+            'waking': '唤醒中',
+            'idle': '空闲',
+            'locked': '锁定',
+            'waiting': '等待'
+        }
+        status_display = status_map.get(status, status)
+        connection_info = None
+
+        if status == 'sleeping':
+            try:
+                connections = proc_obj.connections()
+                if connections:
+                    status_display = '网络等待'
+                    connection_info = f'{len(connections)}个连接'
+                elif proc_obj.open_files():
+                    status_display = 'I/O等待'
+                elif cpu_percent > 0:
+                    status_display = '活跃睡眠'
+                else:
+                    status_display = '空闲睡眠'
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        return status_display, connection_info
+
     def get_memory_top_processes(self, min_memory_mb=10, limit=20):
         """获取内存占用最多的进程（资源使用排行）
         
@@ -259,7 +307,6 @@ class SystemMonitor:
             limit: 返回进程数量限制（默认20）
         """
         processes = []
-        import time
         
         # 首次调用cpu_percent来初始化CPU统计
         cpu_procs = {}
@@ -298,45 +345,11 @@ class SystemMonitor:
                 # 获取详细进程状态
                 try:
                     status = proc_obj.status()
-                    # 将状态转换为更友好的显示
-                    status_map = {
-                        'running': '运行中',
-                        'sleeping': '睡眠',
-                        'disk-sleep': '磁盘等待',
-                        'stopped': '已停止',
-                        'tracing-stop': '跟踪停止',
-                        'zombie': '僵尸进程',
-                        'dead': '已终止',
-                        'wake-kill': '唤醒终止',
-                        'waking': '唤醒中',
-                        'idle': '空闲',
-                        'locked': '锁定',
-                        'waiting': '等待'
-                    }
                     process_info['status'] = status
-                    process_info['status_display'] = status_map.get(status, status)
-                    
-                    # 对于睡眠状态的进程，获取更详细信息
-                    if status == 'sleeping':
-                        try:
-                            # 检查是否有网络连接
-                            connections = proc_obj.connections()
-                            if connections:
-                                process_info['status_display'] = '网络等待'
-                                process_info['connection_info'] = f'{len(connections)}个连接'
-                            else:
-                                # 检查是否有文件操作
-                                open_files = proc_obj.open_files()
-                                if open_files:
-                                    process_info['status_display'] = 'I/O等待'
-                                else:
-                                    # 检查进程是否最近有CPU活动
-                                    if process_info['cpu_percent'] > 0:
-                                        process_info['status_display'] = '活跃睡眠'
-                                    else:
-                                        process_info['status_display'] = '空闲睡眠'
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
+                    status_display, connection_info = self._get_process_status_display(proc_obj, status, process_info['cpu_percent'])
+                    process_info['status_display'] = status_display
+                    if connection_info:
+                        process_info['connection_info'] = connection_info
                             
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     process_info['status'] = 'unknown'
@@ -387,17 +400,7 @@ class SystemMonitor:
                     # 获取创建时间
                     create_time = proc_obj.create_time()
                     process_info['create_time'] = create_time
-                    
-                    # 计算进程运行时间
-                    running_time = time.time() - create_time
-                    if running_time < 60:
-                        process_info['running_time'] = f'{int(running_time)}秒'
-                    elif running_time < 3600:
-                        process_info['running_time'] = f'{int(running_time/60)}分钟'
-                    elif running_time < 86400:
-                        process_info['running_time'] = f'{int(running_time/3600)}小时'
-                    else:
-                        process_info['running_time'] = f'{int(running_time/86400)}天'
+                    process_info['running_time'] = self._format_running_time(create_time)
                         
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     process_info['memory_rss_mb'] = 0
@@ -412,7 +415,7 @@ class SystemMonitor:
                 continue
         
         # Sort by memory usage (RSS)
-        processes.sort(key=lambda x: x['memory_rss_mb'] or 0, reverse=True)
+        processes.sort(key=lambda x: x.get('memory_rss_mb', 0), reverse=True)
         return processes[:limit]  # Top processes by memory
     
     def get_services_status(self):

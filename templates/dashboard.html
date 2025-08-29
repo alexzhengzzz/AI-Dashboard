@@ -345,40 +345,11 @@
         <!-- 进程管理标签页 -->
         <div id="processes-tab" class="tab-content">
             <div class="processes-grid">
-                <div class="card process-card">
-                    <div class="card-header">
-                        <h3>CPU使用率 TOP 10</h3>
-                        <div class="table-controls">
-                            <button class="refresh-btn" data-target="cpu-processes">🔄</button>
-                            <button class="collapse-btn" data-target="cpu-processes-table">
-                                <span>−</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="cpu-processes-table" class="card-body">
-                        <div class="table-wrapper">
-                            <table class="process-table sortable">
-                                <thead>
-                                    <tr>
-                                        <th class="sortable" data-sort="pid">PID <span class="sort-arrow">↕</span></th>
-                                        <th class="sortable" data-sort="name">进程名 <span class="sort-arrow">↕</span></th>
-                                        <th class="sortable" data-sort="cpu">CPU% <span class="sort-arrow">↕</span></th>
-                                        <th class="sortable" data-sort="memory">内存% <span class="sort-arrow">↕</span></th>
-                                        <th>状态</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="processes-tbody">
-                                    <!-- 动态生成进程列表 -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+                
 
                 <div class="card process-card">
                     <div class="card-header">
-                        <h3>内存使用排行 TOP 15</h3>
+                        <h3>进程资源排行 TOP 20</h3>
                         <div class="table-controls">
                             <button class="refresh-btn" data-target="memory-processes">🔄</button>
                             <button class="collapse-btn" data-target="memory-processes-table">
@@ -403,7 +374,7 @@
                         </div>
                         <div class="filter-group">
                             <label>显示受保护进程：</label>
-                            <input type="checkbox" id="show-protected" checked>
+                            <input type="checkbox" id="show-protected">
                         </div>
                     </div>
                     <div id="memory-processes-table" class="card-body">

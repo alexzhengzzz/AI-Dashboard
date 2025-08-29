@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict, Counter
 import threading
+from contextlib import contextmanager
 
 
 class DNSManager:
@@ -33,14 +34,25 @@ class DNSManager:
         
         # 加载统计缓存
         self._load_stats_cache()
-    
+
+    @contextmanager
+    def _get_db_cursor(self, commit=False):
+        """数据库连接和游标的上下文管理器"""
+        with self.db_lock:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                cursor = conn.cursor()
+                yield cursor
+                if commit:
+                    conn.commit()
+            finally:
+                conn.close()
+
     def _init_database(self):
         """
         初始化SQLite数据库
         """
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
+        with self._get_db_cursor(commit=True) as cursor:
             # DNS查询日志表
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS dns_queries (
@@ -106,9 +118,7 @@ class DNSManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_queries_client ON dns_queries(client_ip)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocked_timestamp ON blocked_queries(timestamp)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocked_domain ON blocked_queries(domain)')
-            
-            conn.commit()
-    
+
     def log_query(self, client_ip: str, domain: str, query_type: str, 
                   timestamp: datetime, response_code: str = None, 
                   response_time: float = None, upstream_server: str = None, 
@@ -116,74 +126,65 @@ class DNSManager:
         """
         记录DNS查询日志
         """
-        with self.db_lock:
-            try:
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO dns_queries 
-                        (timestamp, client_ip, domain, query_type, response_code, 
-                         response_time, upstream_server, cached)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (timestamp, client_ip, domain, query_type, response_code,
-                          response_time, upstream_server, cached))
-                    conn.commit()
-                
-                # 更新统计缓存
-                self.stats_cache['total_queries'] += 1
-                
-            except Exception as e:
-                print(f"记录DNS查询日志失败: {e}")
-    
+        try:
+            with self._get_db_cursor(commit=True) as cursor:
+                cursor.execute('''
+                    INSERT INTO dns_queries 
+                    (timestamp, client_ip, domain, query_type, response_code, 
+                     response_time, upstream_server, cached)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (timestamp, client_ip, domain, query_type, response_code,
+                      response_time, upstream_server, cached))
+            
+            # 更新统计缓存
+            self.stats_cache['total_queries'] += 1
+            
+        except Exception as e:
+            print(f"记录DNS查询日志失败: {e}")
+
     def log_blocked_query(self, client_ip: str, domain: str, timestamp: datetime, reason: str = 'adblock'):
         """
         记录被屏蔽的查询日志
         """
-        with self.db_lock:
-            try:
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO blocked_queries (timestamp, client_ip, domain, reason)
-                        VALUES (?, ?, ?, ?)
-                    ''', (timestamp, client_ip, domain, reason))
-                    conn.commit()
-                
-                # 更新统计缓存
-                self.stats_cache['blocked_queries'] += 1
-                
-            except Exception as e:
-                print(f"记录屏蔽查询日志失败: {e}")
-    
+        try:
+            with self._get_db_cursor(commit=True) as cursor:
+                cursor.execute('''
+                    INSERT INTO blocked_queries (timestamp, client_ip, domain, reason)
+                    VALUES (?, ?, ?, ?)
+                ''', (timestamp, client_ip, domain, reason))
+            
+            # 更新统计缓存
+            self.stats_cache['blocked_queries'] += 1
+            
+        except Exception as e:
+            print(f"记录屏蔽查询日志失败: {e}")
+
     def log_server_event(self, event_type: str, description: str, details: str = None):
         """
         记录DNS服务器事件日志
         """
-        with self.db_lock:
-            try:
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO server_events (timestamp, event_type, description, details)
-                        VALUES (?, ?, ?, ?)
-                    ''', (datetime.now(), event_type, description, details))
-                    conn.commit()
-                    
-            except Exception as e:
-                print(f"记录服务器事件日志失败: {e}")
-    
+        try:
+            with self._get_db_cursor(commit=True) as cursor:
+                cursor.execute('''
+                    INSERT INTO server_events (timestamp, event_type, description, details)
+                    VALUES (?, ?, ?, ?)
+                ''', (datetime.now(), event_type, description, details))
+                
+        except Exception as e:
+            print(f"记录服务器事件日志失败: {e}")
+
     def record_cache_hit(self):
         """
         记录缓存命中
         """
         self.stats_cache['cache_hits'] += 1
-    
+
     def record_cache_miss(self):
         """
         记录缓存未命中
         """
         self.stats_cache['cache_misses'] += 1
-    
+
     def record_upstream_query(self, upstream_server: str, success: bool):
         """
         记录上游查询结果
@@ -192,67 +193,36 @@ class DNSManager:
             self.stats_cache['upstream_stats'][upstream_server]['success'] += 1
         else:
             self.stats_cache['upstream_stats'][upstream_server]['failed'] += 1
-    
+
     def get_query_stats(self, hours: int = 24) -> Dict:
         """
         获取查询统计信息
         """
         start_time = datetime.now() - timedelta(hours=hours)
         
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
+        with self._get_db_cursor() as cursor:
             # 总查询数
-            cursor.execute('''
-                SELECT COUNT(*) FROM dns_queries 
-                WHERE timestamp > ?
-            ''', (start_time,))
+            cursor.execute('SELECT COUNT(*) FROM dns_queries WHERE timestamp > ?', (start_time,))
             total_queries = cursor.fetchone()[0]
             
             # 被屏蔽查询数
-            cursor.execute('''
-                SELECT COUNT(*) FROM blocked_queries 
-                WHERE timestamp > ?
-            ''', (start_time,))
+            cursor.execute('SELECT COUNT(*) FROM blocked_queries WHERE timestamp > ?', (start_time,))
             blocked_queries = cursor.fetchone()[0]
             
             # 查询类型分布
-            cursor.execute('''
-                SELECT query_type, COUNT(*) FROM dns_queries 
-                WHERE timestamp > ?
-                GROUP BY query_type
-                ORDER BY COUNT(*) DESC
-            ''', (start_time,))
+            cursor.execute('SELECT query_type, COUNT(*) FROM dns_queries WHERE timestamp > ? GROUP BY query_type ORDER BY COUNT(*) DESC', (start_time,))
             query_types = dict(cursor.fetchall())
             
             # 热门域名
-            cursor.execute('''
-                SELECT domain, COUNT(*) FROM dns_queries 
-                WHERE timestamp > ?
-                GROUP BY domain
-                ORDER BY COUNT(*) DESC
-                LIMIT 10
-            ''', (start_time,))
+            cursor.execute('SELECT domain, COUNT(*) FROM dns_queries WHERE timestamp > ? GROUP BY domain ORDER BY COUNT(*) DESC LIMIT 10', (start_time,))
             top_domains = cursor.fetchall()
             
             # 客户端统计
-            cursor.execute('''
-                SELECT client_ip, COUNT(*) FROM dns_queries 
-                WHERE timestamp > ?
-                GROUP BY client_ip
-                ORDER BY COUNT(*) DESC
-                LIMIT 10
-            ''', (start_time,))
+            cursor.execute('SELECT client_ip, COUNT(*) FROM dns_queries WHERE timestamp > ? GROUP BY client_ip ORDER BY COUNT(*) DESC LIMIT 10', (start_time,))
             top_clients = cursor.fetchall()
             
             # 热门屏蔽域名
-            cursor.execute('''
-                SELECT domain, COUNT(*) FROM blocked_queries 
-                WHERE timestamp > ?
-                GROUP BY domain
-                ORDER BY COUNT(*) DESC
-                LIMIT 10
-            ''', (start_time,))
+            cursor.execute('SELECT domain, COUNT(*) FROM blocked_queries WHERE timestamp > ? GROUP BY domain ORDER BY COUNT(*) DESC LIMIT 10', (start_time,))
             top_blocked_domains = cursor.fetchall()
         
         return {
@@ -273,13 +243,12 @@ class DNSManager:
             },
             'upstream_stats': dict(self.stats_cache['upstream_stats'])
         }
-    
+
     def get_recent_queries(self, limit: int = 50) -> List[Dict]:
         """
         获取最近的查询记录
         """
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
+        with self._get_db_cursor() as cursor:
             cursor.execute('''
                 SELECT timestamp, client_ip, domain, query_type, response_code, 
                        response_time, upstream_server, cached
@@ -302,13 +271,12 @@ class DNSManager:
                 })
         
         return queries
-    
+
     def get_recent_blocked_queries(self, limit: int = 50) -> List[Dict]:
         """
         获取最近被屏蔽的查询记录
         """
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
+        with self._get_db_cursor() as cursor:
             cursor.execute('''
                 SELECT timestamp, client_ip, domain, reason
                 FROM blocked_queries
@@ -326,16 +294,14 @@ class DNSManager:
                 })
         
         return blocked_queries
-    
+
     def get_hourly_stats(self, hours: int = 24) -> Dict:
         """
         获取按小时分组的统计数据
         """
         start_time = datetime.now() - timedelta(hours=hours)
         
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
+        with self._get_db_cursor() as cursor:
             # 按小时统计查询数
             cursor.execute('''
                 SELECT 
@@ -374,92 +340,94 @@ class DNSManager:
         return {
             'hourly_data': hourly_data
         }
-    
+
     def get_client_stats(self, hours: int = 24) -> List[Dict]:
         """
         获取客户端统计信息
         """
         start_time = datetime.now() - timedelta(hours=hours)
         
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
+        with self._get_db_cursor() as cursor:
+            query = '''
+                WITH client_queries AS (
+                    SELECT
+                        client_ip,
+                        COUNT(*) as total_queries,
+                        SUM(CASE WHEN cached THEN 1 ELSE 0 END) as cached_queries
+                    FROM dns_queries
+                    WHERE timestamp > ?
+                    GROUP BY client_ip
+                ),
+                client_blocked AS (
+                    SELECT
+                        client_ip,
+                        COUNT(*) as blocked_queries
+                    FROM blocked_queries
+                    WHERE timestamp > ?
+                    GROUP BY client_ip
+                )
+                SELECT
+                    cq.client_ip,
+                    cq.total_queries,
+                    cq.cached_queries,
+                    COALESCE(cb.blocked_queries, 0) as blocked_queries
+                FROM client_queries cq
+                LEFT JOIN client_blocked cb ON cq.client_ip = cb.client_ip
+                ORDER BY cq.total_queries DESC
+                LIMIT 20;
+            '''
             
-            cursor.execute('''
-                SELECT 
-                    client_ip,
-                    COUNT(*) as total_queries,
-                    SUM(CASE WHEN cached THEN 1 ELSE 0 END) as cached_queries
-                FROM dns_queries
-                WHERE timestamp > ?
-                GROUP BY client_ip
-                ORDER BY total_queries DESC
-                LIMIT 20
-            ''', (start_time,))
+            cursor.execute(query, (start_time, start_time))
             
             clients = []
             for row in cursor.fetchall():
-                client_ip = row[0]
                 total_queries = row[1]
-                cached_queries = row[2]
-                
-                # 获取该客户端的屏蔽查询数
-                cursor.execute('''
-                    SELECT COUNT(*) FROM blocked_queries
-                    WHERE client_ip = ? AND timestamp > ?
-                ''', (client_ip, start_time))
-                blocked_queries = cursor.fetchone()[0]
-                
+                blocked_queries = row[3]
                 clients.append({
-                    'client_ip': client_ip,
+                    'client_ip': row[0],
                     'total_queries': total_queries,
+                    'cached_queries': row[2],
                     'blocked_queries': blocked_queries,
                     'allowed_queries': total_queries - blocked_queries,
-                    'cached_queries': cached_queries,
                     'block_rate': round(blocked_queries / max(total_queries, 1) * 100, 2)
                 })
         
         return clients
-    
+
     def save_config(self, key: str, value: str):
         """
         保存配置
         """
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
+        with self._get_db_cursor(commit=True) as cursor:
             cursor.execute('''
                 INSERT OR REPLACE INTO dns_config (key, value, updated_at)
                 VALUES (?, ?, ?)
             ''', (key, value, datetime.now()))
-            conn.commit()
-    
+
     def get_config(self, key: str, default_value: str = None) -> Optional[str]:
         """
         获取配置
         """
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
+        with self._get_db_cursor() as cursor:
             cursor.execute('SELECT value FROM dns_config WHERE key = ?', (key,))
             result = cursor.fetchone()
             return result[0] if result else default_value
-    
+
     def get_all_configs(self) -> Dict[str, str]:
         """
         获取所有配置
         """
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
+        with self._get_db_cursor() as cursor:
             cursor.execute('SELECT key, value FROM dns_config')
             return dict(cursor.fetchall())
-    
+
     def cleanup_old_logs(self, days: int = 30):
         """
         清理旧的日志记录
         """
         cutoff_date = datetime.now() - timedelta(days=days)
         
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
+        with self._get_db_cursor(commit=True) as cursor:
             # 清理旧的查询日志
             cursor.execute('DELETE FROM dns_queries WHERE timestamp < ?', (cutoff_date,))
             queries_deleted = cursor.rowcount
@@ -471,23 +439,19 @@ class DNSManager:
             # 清理旧的事件日志
             cursor.execute('DELETE FROM server_events WHERE timestamp < ?', (cutoff_date,))
             events_deleted = cursor.rowcount
-            
-            conn.commit()
         
         return {
             'queries_deleted': queries_deleted,
             'blocked_deleted': blocked_deleted,
             'events_deleted': events_deleted
         }
-    
+
     def _load_stats_cache(self):
         """
         从数据库加载统计缓存
         """
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
+            with self._get_db_cursor() as cursor:
                 # 加载总查询数
                 cursor.execute('SELECT COUNT(*) FROM dns_queries')
                 self.stats_cache['total_queries'] = cursor.fetchone()[0]
@@ -498,14 +462,12 @@ class DNSManager:
                 
         except Exception as e:
             print(f"加载统计缓存失败: {e}")
-    
+
     def export_data(self, start_date: str = None, end_date: str = None) -> Dict:
         """
         导出DNS数据
         """
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            
+        with self._get_db_cursor() as cursor:
             # 构建查询条件
             where_clause = ""
             params = []
