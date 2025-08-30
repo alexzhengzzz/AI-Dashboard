@@ -18,6 +18,12 @@
         <h1>服务器监控仪表板</h1>
         <div class="header-controls">
             <span id="last-update">正在加载...</span>
+            <div class="theme-toggle-container">
+                <button id="theme-toggle" class="theme-toggle-btn" title="切换主题">
+                    <span class="theme-icon">🌙</span>
+                    <span class="theme-text">深色</span>
+                </button>
+            </div>
             <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
         </div>
     </header>

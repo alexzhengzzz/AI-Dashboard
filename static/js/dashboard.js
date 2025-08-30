@@ -19,6 +19,10 @@ class Dashboard {
         this.currentTerminal = null;
         this.terminalCounter = 0;
         
+        // 主题相关状态
+        this.currentTheme = localStorage.getItem('dashboard-theme') || 'light';
+        this.initTheme();
+        
         // 加载状态管理
         this.isInitialLoad = true;
         this.dataLoadTimeout = null;
@@ -49,6 +53,9 @@ class Dashboard {
         this.initProcessFilters();
         this.initTerminal();
         this.initDNS();
+        this.initThemeToggle();
+        this.initInteractiveEffects();
+        this.initPageTransitions();
         this.lastStatsData = null;
     }
 
@@ -2970,6 +2977,384 @@ class Dashboard {
         if (uptimeSeconds < 3600) return `${Math.floor(uptimeSeconds / 60)}分钟`;
         if (uptimeSeconds < 86400) return `${Math.floor(uptimeSeconds / 3600)}小时`;
         return `${Math.floor(uptimeSeconds / 86400)}天`;
+    }
+
+    // ==================== 主题系统方法 ====================
+    
+    /**
+     * 初始化主题系统
+     */
+    initTheme() {
+        // 应用保存的主题
+        document.documentElement.setAttribute('data-theme', this.currentTheme);
+        this.updateThemeButton();
+    }
+    
+    /**
+     * 初始化主题切换按钮
+     */
+    initThemeToggle() {
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                this.toggleTheme();
+            });
+        }
+    }
+    
+    /**
+     * 切换主题
+     */
+    toggleTheme() {
+        this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
+        
+        // 应用新主题
+        document.documentElement.setAttribute('data-theme', this.currentTheme);
+        
+        // 保存到本地存储
+        localStorage.setItem('dashboard-theme', this.currentTheme);
+        
+        // 更新按钮显示
+        this.updateThemeButton();
+        
+        // 显示切换动画效果
+        this.playThemeTransition();
+        
+        // 显示提示消息
+        this.showToast(
+            this.currentTheme === 'dark' ? '已切换到深色模式' : '已切换到浅色模式',
+            'info'
+        );
+    }
+    
+    /**
+     * 更新主题切换按钮的显示
+     */
+    updateThemeButton() {
+        const themeIcon = document.querySelector('.theme-icon');
+        const themeText = document.querySelector('.theme-text');
+        
+        if (themeIcon && themeText) {
+            if (this.currentTheme === 'dark') {
+                themeIcon.textContent = '☀️';
+                themeText.textContent = '浅色';
+                themeIcon.parentElement.setAttribute('title', '切换到浅色模式');
+            } else {
+                themeIcon.textContent = '🌙';
+                themeText.textContent = '深色';
+                themeIcon.parentElement.setAttribute('title', '切换到深色模式');
+            }
+        }
+    }
+    
+    /**
+     * 播放主题切换动画效果
+     */
+    playThemeTransition() {
+        // 创建全屏过渡遮罩
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: ${this.currentTheme === 'dark' ? '#0f172a' : '#ffffff'};
+            opacity: 0;
+            z-index: 10000;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // 触发过渡动画
+        requestAnimationFrame(() => {
+            overlay.style.opacity = '0.3';
+            
+            setTimeout(() => {
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    if (overlay.parentNode) {
+                        overlay.parentNode.removeChild(overlay);
+                    }
+                }, 300);
+            }, 150);
+        });
+    }
+
+    // ==================== 交互效果增强 ====================
+    
+    /**
+     * 初始化页面过渡效果
+     */
+    initPageTransitions() {
+        // 添加页面加载过渡效果
+        document.body.classList.add('page-transition');
+        
+        // 页面加载完成后移除loading状态
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.body.classList.add('loaded');
+            }, 100);
+        });
+        
+        // 为所有卡片添加错开动画
+        const cards = document.querySelectorAll('.card');
+        cards.forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+            card.classList.add('page-transition');
+        });
+        
+        // 延迟加载卡片
+        setTimeout(() => {
+            cards.forEach(card => {
+                card.classList.add('loaded');
+            });
+        }, 200);
+    }
+    
+    /**
+     * 初始化交互效果
+     */
+    initInteractiveEffects() {
+        this.initHoverEffects();
+        this.initClickEffects();
+        this.initDataUpdateEffects();
+        this.initScrollEffects();
+    }
+    
+    /**
+     * 悬停效果
+     */
+    initHoverEffects() {
+        // 为卡片添加交互式效果
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => {
+            card.classList.add('interactive-card');
+            
+            card.addEventListener('mouseenter', (e) => {
+                this.playHoverSound();
+                this.addFloatAnimation(e.target);
+            });
+            
+            card.addEventListener('mouseleave', (e) => {
+                this.removeFloatAnimation(e.target);
+            });
+        });
+        
+        // 为按钮添加波纹效果
+        const buttons = document.querySelectorAll('.btn, .tab-btn');
+        buttons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                this.createRippleEffect(e);
+            });
+        });
+        
+        // 监控项点击跳转效果
+        const monitorItems = document.querySelectorAll('.monitor-item, .stat-item, .nav-btn');
+        monitorItems.forEach(item => {
+            if (item.dataset.tab) {
+                item.addEventListener('click', (e) => {
+                    this.smoothTabTransition(item.dataset.tab);
+                    this.playSuccessSound();
+                });
+            }
+        });
+    }
+    
+    /**
+     * 点击效果
+     */
+    initClickEffects() {
+        // 添加全局点击反馈
+        document.addEventListener('click', (e) => {
+            const clickable = e.target.closest('button, .btn, .tab-btn, .clickable');
+            if (clickable) {
+                this.addClickFeedback(clickable);
+            }
+        });
+    }
+    
+    /**
+     * 数据更新视觉反馈
+     */
+    initDataUpdateEffects() {
+        // 重写原有的updateDashboard方法，添加动画
+        const originalUpdate = this.updateDashboard;
+        this.updateDashboard = (data) => {
+            // 添加数据更新动画
+            this.showDataUpdateAnimation();
+            
+            // 调用原始方法
+            originalUpdate.call(this, data);
+            
+            // 添加更新完成反馈
+            this.hideDataUpdateAnimation();
+        };
+    }
+    
+    /**
+     * 滚动效果
+     */
+    initScrollEffects() {
+        // 滚动时的视差效果
+        let ticking = false;
+        
+        window.addEventListener('scroll', () => {
+            if (!ticking) {
+                requestAnimationFrame(() => {
+                    this.updateScrollEffects();
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        });
+    }
+    
+    /**
+     * 创建波纹效果
+     */
+    createRippleEffect(e) {
+        const button = e.currentTarget;
+        const rect = button.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const ripple = document.createElement('span');
+        ripple.className = 'ripple-effect';
+        ripple.style.cssText = `
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            pointer-events: none;
+            transform: scale(0);
+            animation: ripple 0.6s linear;
+            left: ${x}px;
+            top: ${y}px;
+            width: 20px;
+            height: 20px;
+            margin-left: -10px;
+            margin-top: -10px;
+        `;
+        
+        button.style.position = 'relative';
+        button.style.overflow = 'hidden';
+        button.appendChild(ripple);
+        
+        setTimeout(() => {
+            ripple.remove();
+        }, 600);
+    }
+    
+    /**
+     * 添加悬浮动画
+     */
+    addFloatAnimation(element) {
+        if (!element.classList.contains('float-animation')) {
+            element.classList.add('float-animation');
+        }
+    }
+    
+    /**
+     * 移除悬浮动画
+     */
+    removeFloatAnimation(element) {
+        element.classList.remove('float-animation');
+    }
+    
+    /**
+     * 点击反馈
+     */
+    addClickFeedback(element) {
+        element.style.transform = 'scale(0.98)';
+        setTimeout(() => {
+            element.style.transform = '';
+        }, 150);
+    }
+    
+    /**
+     * 平滑标签页过渡
+     */
+    smoothTabTransition(tabName) {
+        const currentTab = document.querySelector('.tab-content.active');
+        const targetTab = document.getElementById(`${tabName}-tab`);
+        const targetBtn = document.querySelector(`[data-tab="${tabName}"]`);
+        
+        if (currentTab && targetTab && currentTab !== targetTab) {
+            // 添加退出动画
+            currentTab.style.animation = 'fadeOutDown 0.3s ease-out forwards';
+            
+            setTimeout(() => {
+                // 切换标签页
+                document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                
+                targetTab.classList.add('active');
+                if (targetBtn) targetBtn.classList.add('active');
+                
+                // 添加进入动画
+                targetTab.style.animation = 'fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards';
+                
+                // 重置动画
+                setTimeout(() => {
+                    currentTab.style.animation = '';
+                    targetTab.style.animation = '';
+                }, 400);
+            }, 300);
+        }
+    }
+    
+    /**
+     * 数据更新动画
+     */
+    showDataUpdateAnimation() {
+        const indicator = document.getElementById('monitoring-indicator');
+        if (indicator) {
+            indicator.classList.add('data-updating');
+        }
+        
+        // 为数值添加更新动画
+        document.querySelectorAll('.metric-value, .stat-value, .monitor-value').forEach(element => {
+            element.classList.add('data-updating');
+        });
+    }
+    
+    hideDataUpdateAnimation() {
+        setTimeout(() => {
+            const indicator = document.getElementById('monitoring-indicator');
+            if (indicator) {
+                indicator.classList.remove('data-updating');
+            }
+            
+            document.querySelectorAll('.metric-value, .stat-value, .monitor-value').forEach(element => {
+                element.classList.remove('data-updating');
+            });
+        }, 1000);
+    }
+    
+    /**
+     * 滚动效果更新
+     */
+    updateScrollEffects() {
+        const scrolled = window.pageYOffset;
+        const parallaxElements = document.querySelectorAll('.parallax-bg');
+        
+        parallaxElements.forEach(element => {
+            const speed = 0.5;
+            element.style.transform = `translateY(${scrolled * speed}px)`;
+        });
+    }
+    
+    /**
+     * 音效反馈（静音版本 - 仅视觉反馈）
+     */
+    playHoverSound() {
+        // 可以在这里添加音效，目前仅做视觉反馈
+    }
+    
+    playSuccessSound() {
+        // 可以在这里添加音效，目前仅做视觉反馈
     }
 }
 
